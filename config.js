@@ -1,7 +1,7 @@
 // Cấu hình trang app trên GitHub Pages. Không có gì bí mật ở đây: máy chủ chỉ trả dữ liệu khi người dùng đã đăng nhập.
 window.APP_CONFIG = {
   // Link triển khai Web App của Apps Script (tài khoản vinhtuyttxd)
-  apiUrl: 'https://script.google.com/macros/s/AKfycbwVpEmvYg9mrv2pExZEhbTLW35hhtgL3DdZoGVzXYH8qYBIsKhRc6fssDEpL0tK1P90rg/exec',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbyonHxKLB0XDIGmwuqeIQejXG_Z-9wP55IZ6P9xtKdSKDlfCxLjY0pfRNAS3m8-hc6Lrw/exec',
   // Mã ứng dụng OAuth (Google Cloud của vinhtuyttxd), phải trùng OAUTH_CLIENT_ID trong Config.gs
   clientId: '358506108957-bkh4mnef4fkd2nsvut1os0tvpct017q0.apps.googleusercontent.com',
   // Địa chỉ trang app, cũng là địa chỉ Google chuyển về sau khi đăng nhập

@@ -1,6 +1,6 @@
 // Bộ nhớ đệm của app: luôn lấy bản mới từ mạng, mất mạng thì dùng bản đã lưu. Không đụng tới yêu cầu gửi máy chủ.
-const CACHE = 'congtrinh-59d7f1893f82';
-const SHELL = ['./', 'styles.css?v=59d7f1893f82', 'app.js?v=59d7f1893f82', 'config.js?v=59d7f1893f82', 'manifest.webmanifest', 'icons/icon-192.png'];
+const CACHE = 'congtrinh-6089b02c7df3';
+const SHELL = ['./', 'styles.css?v=6089b02c7df3', 'app.js?v=6089b02c7df3', 'config.js?v=6089b02c7df3', 'manifest.webmanifest', 'icons/icon-192.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {})); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('congtrinh-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
