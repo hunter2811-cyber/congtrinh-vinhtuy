@@ -44,13 +44,97 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* bỏ qua */ } }
   };
 
-  /** Gọi hàm phía máy chủ, trả về Promise. */
-  function call(fn) {
-    const args = Array.prototype.slice.call(arguments, 1);
-    return new Promise((resolve, reject) => {
-      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn].apply(null, args);
+  /* ---------------- Gọi máy chủ và đăng nhập ---------------- */
+
+  // Bản trên GitHub gọi máy chủ Apps Script bằng fetch kèm mã phiên; bản demo (và trang Apps Script cũ) dùng google.script.run.
+  const viaScriptRun = !!(window.google && google.script && google.script.run);
+  const auth = {
+    get session() { return store.get('session'); },
+    save(d) { store.set('session', d.session); store.set('sessionUser', JSON.stringify(d.user || {})); },
+    clear() { try { localStorage.removeItem('session'); localStorage.removeItem('sessionUser'); } catch (e) { /* bỏ qua */ } }
+  };
+  class ApiError extends Error {}
+
+  function post(body) {
+    return fetch(CONF.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .catch(() => { throw new Error('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.'); })
+      .then(r => { if (!r.ok) throw new Error('Máy chủ báo lỗi ' + r.status + '.'); return r.json(); })
+      .then(res => {
+        if (res.ok) return res.data;
+        const err = new ApiError(res.error);
+        if (res.error === 'AUTH') { auth.clear(); showLogin('Phiên đăng nhập đã hết hạn. Anh/chị đăng nhập lại nhé.'); }
+        else if (/^NO_ACCESS/.test(res.error)) renderGate(res.error);
+        throw err;
+      });
+  }
+
+  /** Gọi hàm phía máy chủ với một tham số, trả về Promise. */
+  function call(fn, arg) {
+    if (viaScriptRun) {
+      return new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
+      });
+    }
+    return post({ fn, arg, session: auth.session });
+  }
+
+  /** Đăng nhập Google kiểu chuyển trang (chạy được cả khi app cài ra màn hình chính trên iPhone). */
+  function startLogin() {
+    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    store.set('loginNonce', nonce);
+    const q = new URLSearchParams({ client_id: CONF.clientId, redirect_uri: CONF.appUrl, response_type: 'id_token', scope: 'openid email profile', nonce, prompt: 'select_account' });
+    location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + q;
+  }
+  /** Google chuyển về kèm #id_token: đổi lấy mã phiên của app. Trả Promise<true> nếu đăng nhập xong. */
+  function finishLogin() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    const token = h.get('id_token'), err = h.get('error');
+    if (!token && !err) return Promise.resolve(false);
+    history.replaceState(null, '', location.pathname + location.search);
+    if (err) { showLogin(err === 'access_denied' ? 'Anh/chị đã hủy đăng nhập.' : 'Đăng nhập không thành công. Thử lại nhé.'); return Promise.resolve(false); }
+    let nonce = '';
+    try { nonce = JSON.parse(decodeURIComponent(escape(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))).nonce; } catch (e) { /* mã hỏng */ }
+    if (!nonce || nonce !== store.get('loginNonce')) { showLogin('Đăng nhập không thành công. Thử lại nhé.'); return Promise.resolve(false); }
+    showLogin('', true);
+    return post({ fn: 'login', idToken: token }).then(d => { auth.save(d); hideLogin(); return true; }, e => {
+      if (!(e instanceof ApiError)) showLogin(e.message);
+      else if (e.message === 'AUTH') showLogin('Google không xác nhận được tài khoản. Thử lại nhé.');
+      return false;
     });
   }
+  function showLogin(msg, busy) {
+    $('login').hidden = false;
+    $('loginMsg').textContent = busy ? 'Đang đăng nhập…' : (msg || '');
+    $('btnLogin').disabled = !!busy;
+  }
+  function hideLogin() { $('login').hidden = true; }
+  function logout() {
+    if (!confirm('Đăng xuất khỏi app trên máy này?')) return;
+    const s = auth.session; auth.clear();
+    if (s) post({ fn: 'logout', session: s }).catch(() => {});
+    showLogin('Đã đăng xuất.');
+  }
+
+  /* ---------------- Gợi ý cài app ---------------- */
+
+  const install = {
+    prompt: null,
+    standalone: () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
+    ios: () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && 'ontouchend' in document),
+    snoozed: () => Date.now() - Number(store.get('installLater') || 0) < 14 * 864e5,
+    show(how) {
+      if (install.standalone() || install.snoozed() || !$('install').hidden) return;
+      const ios = how === 'ios';
+      $('installHow').innerHTML = ios
+        ? 'Bấm nút Chia sẻ <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 15V4M8 7.5 12 3.5l4 4M6.5 11H5.5A1.5 1.5 0 0 0 4 12.5v7A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5h-1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> của Safari, rồi chọn <b>Thêm vào MH chính</b>.'
+        : 'Mở nhanh như ứng dụng, toàn màn hình.';
+      $('installGo').hidden = ios;
+      openPanel($('install'));
+    },
+    hide(snooze) { if (snooze) store.set('installLater', String(Date.now())); closePanel($('install')); }
+  };
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); install.prompt = e; if (state.user) install.show('android'); });
+  window.addEventListener('appinstalled', () => install.hide(false));
 
   function toast(msg, ms, ok) {
     const t = $('toast'), check = $('toastCheck');
@@ -134,7 +218,7 @@
   function load() {
     renderSkeleton();
     return call('apiBootstrap').then(res => {
-      if (res.error) return renderGate(res.error);
+      if (res.error) return renderGate(res.error);   // trang Apps Script cũ trả lỗi trong kết quả
       state.user = res.user;
       res.projects.forEach(p => { p.owner = displayOwner(p.owner); });
       state.projects = res.projects;
@@ -144,7 +228,12 @@
       renderFilters(); renderList(); renderMarkers(); updateNear();
       if (app.dataset.page === 'list') renderListPage();
       if (state.selected && state.byId[state.selected] && isOpen($('detail'))) openDetail(state.selected);
+      if (!viaScriptRun) {
+        if (install.prompt) install.show('android');
+        else if (install.ios()) setTimeout(() => install.show('ios'), 1500);
+      }
     }).catch(err => {
+      if (err instanceof ApiError && (err.message === 'AUTH' || /^NO_ACCESS/.test(err.message))) return;   // đã chuyển sang màn hình đăng nhập / chưa được cấp quyền
       $('rows').innerHTML = '<li class="empty">Không tải được danh sách công trình. ' + esc(err && err.message || err) +
         '<br><button class="textbtn" type="button" id="retry">Thử lại</button></li>';
       $('retry').onclick = load;
@@ -155,7 +244,9 @@
     const email = String(code).split(':')[1] || '';
     document.body.innerHTML = '<div class="gate"><h1>Chưa được cấp quyền</h1><p>' +
       (email ? 'Tài khoản <b>' + esc(email) + '</b> chưa có trong danh sách người dùng.' : 'Không xác định được tài khoản Google đang đăng nhập.') +
-      ' Nhờ admin thêm email này vào tab "Người dùng" rồi chạy hàm chiaSeChoNguoiDung, sau đó mở lại trang.</p></div>';
+      ' Nhờ anh Trung thêm email này vào tab "Người dùng" và tick Hoạt động, sau đó mở lại app.</p>' +
+      (viaScriptRun ? '' : '<button type="button" class="textbtn" id="gateSwitch">Đăng nhập bằng tài khoản khác</button>') + '</div>';
+    if (!viaScriptRun) $('gateSwitch').onclick = () => { auth.clear(); location.reload(); };
   }
 
   function matches(p, ignore) {
@@ -771,7 +862,7 @@
 
   $('engGoogle').onclick = () => switchEngine('google');
   $('engOsm').onclick = () => switchEngine('osm');
-  if (!CONF.mapsKey) { $('engGoogle').disabled = true; $('engGoogle').title = 'Chưa có Google Maps API key'; }
+  if (!CONF.mapsKey) $('engGoogle').parentNode.hidden = true;   // chưa có key Google Maps thì chỉ dùng OSM, ẩn nút chuyển
 
   function locateMe() {
     return getPosition({ maxWait: 8000 }).then(pos => {
@@ -1613,5 +1704,21 @@
   if (savedArea && (CONF.areas || []).some(a => a.code === savedArea)) state.area = savedArea;
   const pref = store.get('mapEngine');
   switchEngine(pref === 'osm' || !CONF.mapsKey ? 'osm' : 'google');
-  load();
+  if (viaScriptRun) load();
+  else {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+    $('btnLogout').hidden = false;
+    $('btnLogout').onclick = logout;
+    $('btnLogin').onclick = startLogin;
+    $('installGo').onclick = () => {
+      if (!install.prompt) return;
+      install.prompt.prompt();
+      install.prompt.userChoice.finally(() => { install.prompt = null; install.hide(false); });
+    };
+    $('installLater').onclick = () => install.hide(true);
+    finishLogin().then(() => {
+      if (auth.session) load();
+      else if ($('login') && $('login').hidden) showLogin();   // màn hình "chưa được cấp quyền" đã thay cả trang thì thôi
+    });
+  }
 })();

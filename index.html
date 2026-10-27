@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <title>Công trình Vĩnh Tuy</title>
+  <meta name="theme-color" content="#0c0d0f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Công trình">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <script>
+    // Đặt giao diện sáng/tối trước khi vẽ trang để không bị nháy màu
+    (function () { var t = null; try { t = localStorage.getItem('theme'); } catch (e) {} document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'; })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css?v=51daa154e8ad">
+</head>
+<body>
+  <div id="app" class="app" data-view="map" data-page="map">
+
+    <header class="topbar">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+          <path d="M12 2.2c-4.1 0-7.4 3.2-7.4 7.2 0 5.3 6.4 11.6 6.7 11.9.4.4 1 .4 1.4 0 .3-.3 6.7-6.6 6.7-11.9 0-4-3.3-7.2-7.4-7.2z" fill="#f2b33d"/>
+          <path d="M8.6 12.6V8.4l3.4-2.3 3.4 2.3v4.2z" fill="#0c0d0f"/>
+          <path d="M11 12.6v-2.3h2v2.3z" fill="#f2b33d"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand-name">Công trình Vĩnh Tuy</span>
+          <span class="brand-scope">Phòng Hạ tầng, Đô thị và Môi trường</span>
+        </div>
+      </div>
+      <nav class="pagetabs" aria-label="Trang">
+        <button type="button" data-page="map" aria-current="page">Bản đồ</button>
+        <button type="button" data-page="list">Danh sách công trình</button>
+      </nav>
+      <div class="topbar-right">
+        <span class="stamp num" id="stamp"></span>
+        <button class="icon-btn" id="btnTheme" type="button" aria-label="Đổi giao diện sáng/tối" title="Đổi giao diện sáng/tối">
+          <svg class="ic-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <svg class="ic-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnRefresh" type="button" aria-label="Tải lại dữ liệu" title="Tải lại dữ liệu">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnLogout" type="button" aria-label="Đăng xuất" title="Đăng xuất" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M14 4.5h3.5A1.5 1.5 0 0 1 19 6v12a1.5 1.5 0 0 1-1.5 1.5H14M10 8l-4 4 4 4M6 12h9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="user" id="user"></div>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- Khu vực, tìm kiếm, lọc: luôn ở trên cùng, dùng chung cho bản đồ và danh sách -->
+      <section class="filters" aria-label="Khu vực và bộ lọc">
+        <div class="t-tabs area-tabs" id="areaTabs" role="tablist" aria-label="Khu vực kiểm tra">
+          <span class="t-tabs-pill" aria-hidden="true"></span>
+        </div>
+        <label class="search">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input id="q" type="search" placeholder="Tìm chủ đầu tư, địa chỉ, số GPXD, ID" autocomplete="off" spellcheck="false" aria-label="Tìm công trình">
+          <button type="button" class="search-clear" id="qClear" aria-label="Xóa tìm kiếm" hidden>
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </label>
+        <div class="chips" id="statusChips" role="group" aria-label="Lọc theo hiện trạng"></div>
+      </section>
+
+      <!-- Danh sách (cột trái trên máy tính, một màn hình trên điện thoại) -->
+      <section class="panel" id="panelList" aria-label="Danh sách công trình">
+        <div class="list-meta">
+          <span id="count" class="num"></span>
+          <select id="sort" aria-label="Sắp xếp">
+            <option value="start">Ngày thi công mới nhất</option>
+            <option value="id">Theo ID</option>
+            <option value="near">Gần tôi nhất</option>
+          </select>
+        </div>
+        <ul class="rows" id="rows" aria-live="polite"></ul>
+      </section>
+
+      <section class="mapwrap" id="panelMap" aria-label="Bản đồ công trình">
+        <div id="map" class="map"></div>
+        <div class="map-tools">
+          <div class="seg" role="group" aria-label="Loại bản đồ">
+            <button type="button" data-engine="google" id="engGoogle">Google</button>
+            <button type="button" data-engine="osm" id="engOsm">OSM</button>
+          </div>
+          <button class="icon-btn solid" id="btnBase" type="button" aria-label="Đổi độ sáng nền bản đồ" title="Đổi độ sáng nền bản đồ">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
+          </button>
+          <button class="icon-btn solid" id="btnLocate" type="button" aria-label="Vị trí của tôi" title="Vị trí của tôi">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="currentColor"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="legend" id="legend"></div>
+        <button type="button" class="near-fab" id="nearFab" aria-label="Công trình gần đây" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg>
+          Gần đây <span class="near-badge num" id="nearBadge">…</span>
+        </button>
+        <section class="near t-panel-slide" id="near" data-open="false" hidden aria-label="Công trình gần bạn"></section>
+        <div class="snap t-panel-slide" id="snap" data-open="false" hidden role="status"></div>
+        <div class="peek t-panel-slide" id="peek" data-open="false" hidden></div>
+        <div class="map-note" id="mapNote" hidden></div>
+      </section>
+    </main>
+
+    <!-- Trang danh sách công trình (máy tính) -->
+    <div class="listpage" id="pageList">
+      <aside class="lp-filters" aria-label="Bộ lọc">
+        <div class="lp-head"><span>Bộ lọc</span><button type="button" class="textbtn" id="lpReset">Về mặc định</button></div>
+        <div id="lpGroups"></div>
+      </aside>
+      <section class="lp-main" aria-label="Danh sách công trình">
+        <div class="lp-bar">
+          <label class="search lp-search">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input id="lq" type="search" placeholder="Tìm chủ đầu tư, địa chỉ, số giấy phép, ID" autocomplete="off" spellcheck="false" aria-label="Tìm công trình">
+          </label>
+          <div class="lp-active" id="lpActive"></div>
+          <span class="lp-count" id="lpCount"></span>
+        </div>
+        <div class="lp-tablewrap">
+          <table class="lp-table">
+            <thead><tr><th>ID</th><th>Chủ đầu tư</th><th>Địa chỉ xây dựng</th><th>Giấy phép</th><th>Quy mô</th><th class="on">Ngày thi công ↓</th><th>Hiện trạng</th><th>Cập nhật</th><th>Vị trí</th></tr></thead>
+            <tbody id="lpRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <nav class="bottombar" aria-label="Chuyển màn hình">
+      <button type="button" data-go="map" aria-current="page">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5V4l-6 2.5z M9 4v13 M15 6.5v13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span>Bản đồ</span>
+      </button>
+      <button type="button" data-go="list">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>Danh sách <b class="num" id="navCount"></b></span>
+      </button>
+    </nav>
+
+    <!-- Hồ sơ công trình -->
+    <section class="sheet" id="detail" hidden data-open="false" aria-modal="true" role="dialog" aria-labelledby="dTitle"></section>
+    <!-- Kiểm tra hiện trường -->
+    <section class="sheet" id="inspect" hidden data-open="false" aria-modal="true" role="dialog" aria-labelledby="iTitle"></section>
+    <!-- Cập nhật hiện trạng nhanh (sau khi chụp) -->
+    <div class="scrim" id="scrim" hidden></div>
+    <section class="stsheet" id="stSheet" hidden data-open="false" role="dialog" aria-modal="true" aria-labelledby="stTitle"></section>
+    <input type="file" id="snapInput" accept="image/*" capture="environment" hidden>
+    <!-- Ảnh phóng to -->
+    <div class="viewer" id="viewer" hidden role="dialog" aria-label="Ảnh hiện trường"></div>
+    <div class="toast t-toast" id="toast" role="status" hidden>
+      <span class="t-success-check" id="toastCheck" data-state="out" aria-hidden="true" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span id="toastText"></span>
+    </div>
+  </div>
+
+  <!-- Đăng nhập (chỉ ở bản chạy trên GitHub) -->
+  <section class="login" id="login" aria-labelledby="loginTitle" hidden>
+    <div class="login-card">
+      <svg class="login-mark" viewBox="0 0 24 24" width="56" height="56" aria-hidden="true">
+        <path d="M12 2.2c-4.1 0-7.4 3.2-7.4 7.2 0 5.3 6.4 11.6 6.7 11.9.4.4 1 .4 1.4 0 .3-.3 6.7-6.6 6.7-11.9 0-4-3.3-7.2-7.4-7.2z" fill="#f2b33d"/>
+        <path d="M8.6 12.6V8.4l3.4-2.3 3.4 2.3v4.2z" fill="#0c0d0f"/>
+        <path d="M11 12.6v-2.3h2v2.3z" fill="#f2b33d"/>
+      </svg>
+      <h1 id="loginTitle">Công trình Vĩnh Tuy</h1>
+      <p class="login-sub">Phòng Hạ tầng, Đô thị và Môi trường</p>
+      <button type="button" class="login-btn" id="btnLogin">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z" fill="#4285f4"/><path d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z" fill="#34a853"/><path d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2z" fill="#fbbc05"/><path d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10c.8-2.4 3-4.1 5.6-4.1z" fill="#ea4335"/></svg>
+        Đăng nhập bằng Google
+      </button>
+      <p class="login-msg" id="loginMsg" role="status"></p>
+      <p class="login-note">Dùng tài khoản Google đã được anh Trung cấp quyền. Đăng nhập một lần, app nhớ trên máy này 30 ngày.</p>
+    </div>
+  </section>
+
+  <!-- Gợi ý cài app ra màn hình chính -->
+  <aside class="install t-panel-slide" id="install" data-open="false" hidden aria-label="Cài app">
+    <img class="install-icon" src="icons/icon-192.png" alt="" width="44" height="44">
+    <div class="install-text">
+      <b>Cài app vào màn hình chính</b>
+      <span id="installHow">Mở nhanh như ứng dụng, toàn màn hình.</span>
+    </div>
+    <div class="install-acts">
+      <button type="button" class="install-go" id="installGo">Cài đặt</button>
+      <button type="button" class="install-later" id="installLater">Để sau</button>
+    </div>
+  </aside>
+
+  <datalist id="statusList"></datalist>
+
+  <script src="config.js?v=51daa154e8ad"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="app.js?v=51daa154e8ad"></script>
+</body>
+</html>

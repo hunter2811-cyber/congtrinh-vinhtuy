@@ -1,15 +1,20 @@
-# Công trình Vĩnh Tuy · giao diện
+# Công trình Vĩnh Tuy
 
-Giao diện của app theo dõi công trình xây dựng phường Vĩnh Tuy.
+App theo dõi công trình xây dựng phường Vĩnh Tuy, chạy trên GitHub Pages:
+https://hunter2811-cyber.github.io/congtrinh-vinhtuy/
 
-App chạy trên Google Apps Script. Trang Apps Script chỉ là phần khung: nó tải các file trong repo này qua GitHub Pages, nên sửa giao diện chỉ cần đẩy lên đây, không phải dán lại mã vào Apps Script.
+Trang web ở đây chỉ là giao diện. Dữ liệu nằm trong Google Sheets của tài khoản hệ thống; máy chủ Apps Script chỉ trả dữ liệu cho người đã đăng nhập Google và có tên trong tab "Người dùng".
+
+Trên điện thoại, mở link bằng Chrome (Android) hoặc Safari (iPhone) rồi "Thêm vào màn hình chính" để dùng như ứng dụng.
 
 | File | Nội dung |
 | --- | --- |
-| `body.html` | Thân trang |
+| `index.html` | Trang app |
 | `styles.css` | Kiểu chữ, màu, sáng/tối, chuyển động |
-| `app.js` | Bản đồ, bộ lọc, danh sách, hồ sơ, chụp ảnh |
-| `version.json` | Mã phiên bản; đổi mã thì trình duyệt tải bản mới |
+| `app.js` | Đăng nhập, bản đồ, bộ lọc, danh sách, hồ sơ, chụp ảnh |
+| `config.js` | Link máy chủ, mã đăng nhập Google, khu vực (không có gì bí mật) |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Để cài app ra màn hình chính |
+| `body.html`, `version.json` | Cho trang Apps Script đời cũ, sẽ bỏ |
 | `demo/` | Bản demo dùng dữ liệu giả |
 
-Repo không chứa mã máy chủ, cấu hình hay dữ liệu thật. Dữ liệu nằm trong Google Sheets, chỉ người được cấp quyền mới đọc được.
+Repo không chứa mã máy chủ hay dữ liệu thật.
