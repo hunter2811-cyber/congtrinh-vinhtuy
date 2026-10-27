@@ -34,6 +34,7 @@
     call: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6.6 3.8h2.6l1.4 3.7-1.9 1.3a10.6 10.6 0 0 0 4.5 4.5l1.3-1.9 3.7 1.4v2.6a2 2 0 0 1-2.1 2A14.4 14.4 0 0 1 4.6 5.9a2 2 0 0 1 2-2.1z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
     clock: '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    expand: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     close: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     cam: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
     dir: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.8 21.2 12 12 21.2 2.8 12z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.2 14.2v-2.4a1 1 0 0 1 1-1h4.3M12.8 8.8l1.9 2-1.9 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
@@ -563,7 +564,8 @@
         this.setBase(state.base);
         this.layer = L.layerGroup().addTo(this.m);
         this.items = {};
-        this.m.on('click', () => hidePeek());
+        this.m.on('click', () => { hidePeek(); hidePop(); });
+        this.m.on('move zoom', () => placePop());   // popup máy tính đi theo marker khi kéo / zoom bản đồ
         // Cỡ marker đổi liên tục theo mức zoom (mỗi khung hình khi bay), không giật cục sau khi zoom xong
         // Khung bản đồ đổi cỡ (thanh lọc hiện ra sau khi tải dữ liệu, xoay máy...): báo Leaflet đo lại, nếu không mọi phép căn giữa sẽ lệch
         if (window.ResizeObserver) new ResizeObserver(() => { cancelAnimationFrame(this._ro); this._ro = requestAnimationFrame(() => this.m.invalidateSize({ pan: false })); }).observe(el);
@@ -663,28 +665,29 @@
         if (p.id === state.selected) mk.bringToFront();
       },
       /** Bay đến công trình (cùng một kiểu cho mọi cách chọn: danh sách, marker, Gần đây). */
-      /** Một lần bay liền mạch (Leaflet tự zoom ra rồi vào theo khoảng cách). offsetY: đặt marker cao hơn tâm để không bị thẻ thông tin che. Trả về thời gian bay (giây). */
-      focus(lat, lng, zoom, done, offsetY) {
+      /** Một lần bay liền mạch (Leaflet tự zoom ra rồi vào theo khoảng cách). offsetY: đặt marker cao hơn tâm để không bị thẻ thông tin che;
+          offsetX: đặt marker lệch trái so với tâm (máy tính: marker về giữa cửa sổ, chừa chỗ cho popup). Trả về thời gian bay (giây). */
+      focus(lat, lng, zoom, done, offsetY, offsetX) {
         const z = zoom || Math.max(this.m.getZoom(), 17);
         let target = L.latLng(lat, lng);
-        if (offsetY) target = this.m.unproject(this.m.project(target, z).add([0, offsetY]), z);
+        if (offsetY || offsetX) target = this.m.unproject(this.m.project(target, z).add([offsetX || 0, offsetY || 0]), z);
         const marker = L.latLng(lat, lng);
         if (calm()) { this.m.setView(target, z); if (done) done(); return 0; }
         // Công trình đang thấy trên màn hình (thường là chạm marker): zoom thẳng vào đúng marker,
         // marker trượt từ chỗ đang đứng về giữa trong lúc zoom, không zoom ra.
-        if (this.m.getBounds().pad(-0.04).contains(marker)) return this.zoomInto(marker, z, done, offsetY || 0);
+        if (this.m.getBounds().pad(-0.04).contains(marker)) return this.zoomInto(marker, z, done, offsetY || 0, offsetX || 0);
         // Công trình ở xa: một chuyến bay liền mạch, zoom ra rồi vào.
         const dur = Math.min(2.4, Math.max(0.9, 0.5 + this.m.distance(this.m.getCenter(), target) / 1200));
         if (done) this.m.once('moveend', done);
         this.m.flyTo(target, z, { duration: dur, easeLinearity: 0.25 });
         return dur;
       },
-      zoomInto(marker, z1, done, offsetY) {
+      zoomInto(marker, z1, done, offsetY, offsetX) {
         const m = this.m;
         m._stop();                     // dừng chuyến bay đang dở (không dùng stop(): nó tự zoom/pan có hiệu ứng, làm lệch vị trí)
         const size = m.getSize(), z0 = m.getZoom();
         const s0 = m.latLngToContainerPoint(marker);                  // marker đang ở đâu trên màn hình
-        const s1 = L.point(size.x / 2, size.y / 2 - offsetY);       // muốn marker về đâu
+        const s1 = L.point(size.x / 2 - (offsetX || 0), size.y / 2 - offsetY);       // muốn marker về đâu
         const dur = 0.85, t0 = performance.now();
         const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
         const at = k => {
@@ -748,6 +751,8 @@
         this.meAcc = L.circle([pos.lat, pos.lng], { radius: pos.acc || 10, color: '#4cb3f0', weight: 1, opacity: .5, fillColor: '#4cb3f0', fillOpacity: .14, interactive: false }).addTo(this.m);
         this.me = L.circleMarker([pos.lat, pos.lng], { radius: 7, color: '#ffffff', weight: 3, fillColor: '#4c8df0', fillOpacity: 1, interactive: false }).addTo(this.m);
       },
+      canPop: true,
+      point(loc) { return this.m.latLngToContainerPoint([loc.lat, loc.lng]); },
       keepAbove(loc, pad) {
         const pt = this.m.latLngToContainerPoint([loc.lat, loc.lng]);
         const limit = this.m.getSize().y - pad - 24;
@@ -831,6 +836,7 @@
   }
 
   function switchEngine(name, note) {
+    hidePop();
     if (state.engineName === name && state.engine) return Promise.resolve();
     const el = $('map');
     if (state.engine) { try { state.engine.destroy(); } catch (e) { /* bỏ qua */ } }
@@ -890,7 +896,7 @@
   }
   /** Sau khi đổi bộ lọc: công trình đang mở mà không còn trong bộ lọc thì đóng thẻ thông tin. */
   function dropHiddenSelection() {
-    if (state.selected && !visible().some(p => p.id === state.selected)) hidePeek();
+    if (state.selected && !visible().some(p => p.id === state.selected)) { hidePeek(); hidePop(); }
   }
 
   $('btnBase').onclick = () => {
@@ -959,14 +965,24 @@
       state.engine.restyle(p);
     }
     const peek = from === 'map' && isPhone();
+    // Máy tính: bấm marker hoặc chọn ở danh sách bên trái thì hiện popup cạnh marker thay cho hồ sơ
+    const pop = !isPhone() && (from === 'map' || from === 'list') && !!p.loc && !!(state.engine && state.engine.canPop);
     state.grown = null;
+    hidePop();
     if (state.engine && state.engine.restyle) state.engine.restyle(p);
-    if (peek) showPeek(p); else openDetail(id);
+    if (peek) showPeek(p);
+    else if (!pop) openDetail(id);
+    else if (isOpen($('detail'))) closeDetail();
     if (p.loc && state.engine && state.engine.focus) {
       // Mọi cách chọn đều bay một mạch đến công trình; marker to lên ở đoạn cuối chuyến bay.
       // Điện thoại: điểm đến được đẩy lên trên thẻ thông tin ngay trong chuyến bay, không phải dịch thêm sau đó.
-      const offsetY = peek ? Math.round($('peek').offsetHeight / 2) + 6 : 0;
-      const dur = state.engine.focus(p.loc.lat, p.loc.lng, null, () => { if (state.selected === id) state.engine.pulse(p); }, offsetY);
+      // Máy tính có popup: marker về đúng giữa cửa sổ (không phải giữa vùng bản đồ), popup hiện khi bay tới nơi.
+      const off = pop ? popOffset() : { x: 0, y: peek ? Math.round($('peek').offsetHeight / 2) + 6 : 0 };
+      const dur = state.engine.focus(p.loc.lat, p.loc.lng, null, () => {
+        if (state.selected !== id) return;
+        state.engine.pulse(p);
+        if (pop) showPop(p);
+      }, off.y, off.x);
       state.engine.animateBoost(prev !== id ? prev : null, id, dur);
     } else if (!p.loc) {
       toast('Công trình chưa có vị trí trên bản đồ. Đến công trình chụp ảnh để lưu vị trí.', 4000);
@@ -975,8 +991,11 @@
 
   function showPeek(p) {
     const el = $('peek');
-    el.innerHTML = '<div class="peek-owner">' + esc(p.owner) + '</div>' +
+    const ph = p.last && p.last.photo;
+    el.innerHTML = '<div class="peek-head">' + (ph ? '<span class="peek-thumb" aria-hidden="true"></span>' : '') +
+      '<div class="peek-text"><div class="peek-owner">' + esc(p.owner) + '</div>' +
       '<div class="peek-sub">' + esc(p.address) + '</div>' +
+      (ph ? '<div class="peek-cap num">Ảnh gần nhất ' + esc(ph.at.slice(0, 5) + ph.at.slice(10)) + '</div>' : '') + '</div></div>' +
       '<div class="d-tags"><span class="pill ' + p.group + '">' + esc(p.status || '—') + '</span><span class="pill num">' + esc(p.id) + '</span>' +
         (state.me && p.loc ? '<span class="pill num">cách ' + fmtDist(meters(state.me, p.loc)) + '</span>' : '') + '</div>' +
       '<div class="peek-actions"><button type="button" class="btn primary big" data-act="cam">' + ICON.cam + 'Chụp ảnh</button>' +
@@ -984,6 +1003,7 @@
         '<a class="btn big" href="' + dirUrl(p) + '" target="_blank" rel="noopener">' + ICON.dir + 'Chỉ đường</a>' +
         '<button type="button" class="btn big" data-act="detail">Hồ sơ</button></div>';
     openPanel(el); $('nearFab').hidden = true;
+    if (ph) fillThumb(el.querySelector('.peek-thumb'), ph.id, 300, () => state.selected === p.id);   // ảnh nhỏ chỉ để xem, chạm không mở
     el.querySelector('[data-act="cam"]').onclick = () => { hidePeek(); quickPhoto(p.id); };
     el.querySelector('[data-act="detail"]').onclick = () => { hidePeek(); openDetail(p.id); };
     el.querySelector('[data-act="status"]').onclick = () => { hidePeek(); openStatus(p.id); };   // cập nhật hiện trạng không cần chụp ảnh
@@ -1115,7 +1135,7 @@
       if (pos) lines.push(fmtCoord(pos.lat) + ', ' + fmtCoord(pos.lng) + '  ±' + Math.round(pos.acc) + ' m');
       lines.push(p.id + ' · ' + p.address);
       return processImage(file, lines);
-    }).then(dataUrl => call('apiUploadPhoto', { id: p.id, dataUrl, index: 1, caption: '' }))
+    }).then(dataUrl => call('apiUploadPhoto', { id: p.id, dataUrl, index: 1, caption: '' }).then(up => { seedThumb(up.fileId, dataUrl); return up; }))
       .then(up => {
         // Công trình chưa có vị trí thì lấy luôn vị trí lúc chụp (nếu GPS đủ chính xác)
         const move = !p.loc && !!pos && pos.acc <= 30;
@@ -1123,10 +1143,11 @@
           id: p.id, status: '', note: '',
           lat: pos ? pos.lat : null, lng: pos ? pos.lng : null, acc: pos ? pos.acc : null,
           updateLocation: move, photoIds: [up.fileId]
-        }).then(res => ({ res, move }));
+        }).then(res => ({ res, move, up }));
       })
-      .then(({ res, move }) => {
-        p.last = Object.assign({}, p.last || {}, { t: Date.now(), at: res.at, by: state.user.name, photos: 1, count: (p.last ? p.last.count : 0) + 1 });
+      .then(({ res, move, up }) => {
+        p.last = Object.assign({}, p.last || {}, { t: Date.now(), at: res.at, by: state.user.name, photos: 1, count: (p.last ? p.last.count : 0) + 1,
+          photo: { id: up.fileId, n: 1, t: Date.now(), at: res.at } });
         if (move) p.loc = { lat: pos.lat, lng: pos.lng, acc: Math.round(pos.acc), source: 'GPS hiện trường', by: state.user.name, at: res.at };
         refresh(); updateNear();
         showSnap(p, 'ok', thumb, 'Đã lưu 1 ảnh vào công trình ' + p.id,
@@ -1480,6 +1501,7 @@
     const src = p.last && p.last.status
       ? 'Cập nhật tại hiện trường ' + esc(p.last.at) + ' bởi ' + esc(p.last.by) + (p.sheetStatus && p.sheetStatus !== p.last.status ? ' · trên sheet: ' + esc(p.sheetStatus) : '')
       : 'Theo file dữ liệu';
+    const ph = p.last && p.last.photo;
     const loc = p.loc
       ? '<div class="gps-coord num">' + fmtCoord(p.loc.lat) + ', ' + fmtCoord(p.loc.lng) + '</div>' +
         '<div class="hint">' + esc(p.loc.source) + (p.loc.acc ? ' · sai số ±' + p.loc.acc + ' m' : '') + (p.loc.at ? ' · ' + esc(p.loc.at) : '') + (p.loc.by && p.loc.by !== 'Hệ thống' ? ' · ' + esc(p.loc.by) : '') + '</div>'
@@ -1494,7 +1516,9 @@
         '<div class="d-actions"><button type="button" class="btn primary big" data-inspect>' + ICON.cam + 'Chụp ảnh và kiểm tra</button>' +
           '<a class="btn big" href="' + dirUrl(p) + '" target="_blank" rel="noopener">' + ICON.dir + 'Chỉ đường</a>' +
           (p.phone ? '<a class="btn big" href="tel:' + esc(p.phone.split(/\s|\n/)[0].replace(/[^\d+]/g, '')) + '">Gọi chủ đầu tư</a>' : '<span></span>') + '</div>' +
-        '<div class="card"><div class="card-head"><h2>Hiện trạng</h2><button type="button" class="btn small status-edit" data-status>' + ICON.status + 'Cập nhật</button></div><div class="status-now">' + esc(p.status || '—') + '</div><div class="status-src">' + src + '</div></div>' +
+        '<div class="card"><div class="card-head"><h2>Hiện trạng</h2><button type="button" class="btn small status-edit" data-status>' + ICON.status + 'Cập nhật</button></div>' + (ph ? '<div class="st-row"><button type="button" class="st-thumb" aria-label="Xem ảnh gần nhất cỡ lớn"><span class="zoom" aria-hidden="true">' + ICON.expand + '</span></button><div>' : '') +
+          '<div class="status-now">' + esc(p.status || '—') + '</div><div class="status-src">' + src + '</div>' +
+          (ph ? '<div class="status-src">Ảnh gần nhất ' + esc(ph.at) + '. Bấm vào ảnh để xem lớn.</div></div></div>' : '') + '</div>' +
         '<div class="card"><h2>Biên bản kiểm tra</h2>' + ladder(p) + '</div>' +
         '<div class="card"><h2>Giấy phép và quy mô</h2><dl class="kv">' +
           kv('Số GPXD', esc(p.gpxd) + (p.gpxdDate ? ' ngày ' + esc(p.gpxdDate) : '')) +
@@ -1517,6 +1541,11 @@
     el.querySelector('[data-close]').onclick = closeDetail;
     el.querySelector('[data-inspect]').onclick = () => openInspect(p.id, { camera: true });
     el.querySelector('.status-edit').onclick = () => openStatus(p.id);
+    if (ph) {
+      const b = el.querySelector('.st-thumb');
+      fillThumb(b, ph.id, 300, () => state.selected === p.id);
+      b.onclick = () => openPhoto(ph.id, b.dataset.src);
+    }
     loadHistory(p.id);
   }
   function closeDetail() { closePanel($('detail')); }
@@ -1559,7 +1588,103 @@
     v.onclick = closeViewer;
     back.sync();
   }
-  function closeViewer() { const v = $('viewer'); v.hidden = true; v.innerHTML = ''; back.sync(); }
+  function closeViewer() { const v = $('viewer'); v.hidden = true; v.innerHTML = ''; v._want = null; back.sync(); }
+
+  /* ---------------- Ảnh gần nhất: ảnh thu nhỏ và popup trên máy tính ---------------- */
+
+  // Ảnh thu nhỏ đã tải (theo file và cỡ), dùng lại khi mở lại thẻ / popup
+  const thumbCache = {};
+  function thumb(fid, size) {
+    const k = fid + '@' + size;
+    return thumbCache[k] || (thumbCache[k] = call('apiGetThumb', { id: fid, size }).catch(e => { delete thumbCache[k]; throw e; }));
+  }
+  /** Ảnh vừa chụp trên máy này: dùng luôn bản đã nén, không phải tải lại từ máy chủ. */
+  function seedThumb(fid, dataUrl) { [300, 800].forEach(s => { thumbCache[fid + '@' + s] = Promise.resolve(dataUrl); }); }
+  /** Đặt ảnh thu nhỏ làm nền ô (cắt giữa, vừa mọi tỷ lệ ảnh). still(): ô vẫn còn đúng công trình. */
+  function fillThumb(box, fid, size, still) {
+    box.classList.add('loading');
+    thumb(fid, size).then(url => {
+      if (!still() || !box.isConnected) return;
+      box.style.backgroundImage = 'url("' + url + '")';
+      box.dataset.src = url;
+      box.classList.remove('loading');
+    }).catch(() => { box.classList.remove('loading'); box.classList.add('failed'); });
+  }
+  /** Mở ảnh lớn: hiện ngay bản thu nhỏ (nếu có), rồi thay bằng ảnh gốc khi tải xong. */
+  function openPhoto(fid, preview) {
+    openViewer(preview || '');
+    const v = $('viewer'); v._want = fid;
+    if (!preview) v.querySelector('img').classList.add('loading');
+    call('apiGetPhoto', fid).then(url => {
+      if (v.hidden || v._want !== fid) return;
+      const img = v.querySelector('img'); img.src = url; img.classList.remove('loading');
+    }).catch(() => { if (!v.hidden && v._want === fid) toast('Không tải được ảnh gốc.'); });
+  }
+
+  /** Lệch của marker so với tâm bản đồ để marker nằm giữa cửa sổ; màn hình hẹp thì dịch trái để popup (rộng ~540 px) không tràn. */
+  function popOffset() {
+    const r = $('map').getBoundingClientRect();
+    const x = Math.max(40, Math.min(window.innerWidth / 2 - r.left, r.width - 560));
+    const y = Math.max(170, Math.min(window.innerHeight / 2 - r.top, r.height - 170));
+    return { x: Math.round(r.width / 2 - x), y: Math.round(r.height / 2 - y) };
+  }
+  function showPop(p) {
+    const el = $('mpop'), ph = p.last && p.last.photo;
+    const checks = (p.checks || []).map((c, i) => (c.bb || c.tb) ? 'Lần ' + (i + 1) + ' ' + (c.bb || c.tb) : '').filter(Boolean);
+    const row = (k, v) => v ? '<dt>' + k + '</dt><dd>' + v + '</dd>' : '';
+    el.innerHTML = '<span class="mpop-arrow" aria-hidden="true"></span>' +
+      '<div class="mpop-info">' +
+        '<div class="mpop-owner" id="mpopTitle">' + esc(p.owner || '—') + '</div>' +
+        '<div class="mpop-addr">' + esc(p.address) + '</div>' +
+        '<div class="d-tags">' + (p.area ? '<span class="pill">Khu ' + p.area + '</span>' : '') + '<span class="pill num">' + esc(p.id) + '</span></div>' +
+        '<div class="mpop-st"><span class="mpop-l">Hiện trạng</span><b>' + dot(p.group) + esc(p.status || GROUP[p.group].label) + '</b>' +
+          '<span class="mpop-l">' + (p.last && p.last.status ? esc(p.last.by) + ' · <span class="num">' + esc(p.last.at) + '</span>' : 'Theo file dữ liệu') + '</span></div>' +
+        '<dl class="mpop-kv">' +
+          row('Biên bản', checks.length ? '<span class="num">' + esc(checks[checks.length - 1]) + '</span>' : 'Chưa kiểm tra') +
+          row('Số GPXD', esc(p.gpxd) + (p.gpxdDate ? ' <span class="num">' + esc(p.gpxdDate) + '</span>' : '')) +
+          row('Quy mô', esc(p.scale)) +
+          row('Ngày thi công', '<span class="num">' + esc(p.start || '—') + '</span>') +
+        '</dl>' +
+        '<button type="button" class="btn small mpop-more">Mở hồ sơ đầy đủ</button>' +
+      '</div>' +
+      (ph ? '<button type="button" class="mpop-photo loading" aria-label="Xem ảnh gần nhất cỡ lớn"><span class="mpop-badge num">' + esc(ph.at.slice(0, 5)) + (ph.n > 1 ? ' · ' + ph.n + ' ảnh' : '') + '</span></button>' : '') +
+      '<button type="button" class="mpop-x" aria-label="Đóng">' + ICON.close + '</button>';
+    el.classList.toggle('has-photo', !!ph);
+    el.dataset.id = p.id;
+    el.hidden = false;
+    $('panelMap').classList.add('pop-open');
+    placePop();
+    if (!calm()) gsap.fromTo(el, { autoAlpha: 0, x: -8 }, { autoAlpha: 1, x: 0, duration: 0.28, ease: 'expo.out', clearProps: 'transform,opacity,visibility' });
+    el.querySelector('.mpop-x').onclick = hidePop;
+    el.querySelector('.mpop-more').onclick = () => { hidePop(); openDetail(p.id); };
+    if (!ph) return;
+    const box = el.querySelector('.mpop-photo');
+    box.onclick = () => openPhoto(ph.id, box.dataset.src);
+    thumb(ph.id, 800).then(url => {
+      if (el.dataset.id !== p.id || !box.isConnected) return;
+      const img = new Image();
+      img.alt = 'Ảnh hiện trường gần nhất';
+      img.onload = () => {
+        if (!box.isConnected) return;
+        // Khung cao cố định, rộng theo đúng tỷ lệ ảnh: 3:4 rộng 225, 9:16 rộng 169; ảnh ngang tối đa 300 và hiện trọn
+        const w = Math.round(box.clientHeight * img.naturalWidth / img.naturalHeight);
+        box.style.width = Math.max(150, Math.min(300, w)) + 'px';
+        box.prepend(img); box.dataset.src = url; box.classList.remove('loading');
+        placePop();
+      };
+      img.src = url;
+    }).catch(() => { box.classList.remove('loading'); box.classList.add('failed'); });
+  }
+  function hidePop() { const el = $('mpop'); if (el.hidden) return; el.hidden = true; el.innerHTML = ''; el.dataset.id = ''; $('panelMap').classList.remove('pop-open'); }
+  /** Đặt popup bên phải marker, mũi tên chỉ vào marker và cách viền marker một khoảng nhỏ. */
+  function placePop() {
+    const el = $('mpop'); if (el.hidden) return;
+    const p = state.byId[el.dataset.id];
+    if (!p || !p.loc || !state.engine || !state.engine.point) { hidePop(); return; }
+    const pt = state.engine.point(p.loc), r = state.engine.rad ? state.engine.rad(p) : 12;
+    el.style.left = Math.round(pt.x + r + 2 + 7 + 7) + 'px';   // bán kính + nửa viền + khoảng hở 7 px + mũi tên 7 px
+    el.style.top = Math.round(pt.y - el.offsetHeight / 2) + 'px';
+  }
 
   /* ---------------- Kiểm tra hiện trường ---------------- */
 
@@ -1720,8 +1845,8 @@
         if (insp.uploaded[i]) { ids.push(insp.uploaded[i]); return; }
         prog.textContent = 'Đang xử lý và tải ảnh ' + (i + 1) + '/' + insp.files.length + '…';
         return processImage(f.file, stampLines(f.file, p))
-          .then(dataUrl => call('apiUploadPhoto', { id: p.id, dataUrl, index: i + 1, caption: status }))
-          .then(res => { insp.uploaded[i] = res.fileId; ids.push(res.fileId); });
+          .then(dataUrl => call('apiUploadPhoto', { id: p.id, dataUrl, index: i + 1, caption: status }).then(res => { seedThumb(res.fileId, dataUrl); return res; }))
+          .then(res => { insp.uploaded[i] = res.fileId; ids.push(res.fileId); return res; });
       });
     });
     chain.then(() => {
@@ -1733,7 +1858,8 @@
       });
     }).then(res => {
       // Cập nhật ngay trên máy, không cần tải lại toàn bộ
-      p.last = { at: res.at, by: state.user.name, status, note, photos: ids.length, count: (p.last ? p.last.count : 0) + 1 };
+      p.last = { t: Date.now(), at: res.at, by: state.user.name, status, note, photos: ids.length, count: (p.last ? p.last.count : 0) + 1,
+        photo: ids.length ? { id: ids[ids.length - 1], n: ids.length, t: Date.now(), at: res.at } : (p.last && p.last.photo) || null };
       if (status) { p.status = status; p.group = groupOf(status, p); }
       if (move && insp.pos) p.loc = { lat: insp.pos.lat, lng: insp.pos.lng, acc: Math.round(insp.pos.acc), source: 'GPS hiện trường', by: state.user.name, at: res.at };
       insp.busy = false;
@@ -1779,6 +1905,7 @@
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (!$('viewer').hidden) { closeViewer(); return; }
+    if (!$('mpop').hidden) { hidePop(); return; }
     if (isOpen($('stSheet'))) { closeStatus(); return; }
     if (isOpen($('near'))) { closeNear(); return; }
     if (isOpen($('inspect'))) { closeInspect(); return; }
