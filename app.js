@@ -150,11 +150,43 @@
   function openPanel(el) {
     clearTimeout(el._h);
     el.hidden = false; void el.offsetWidth; el.dataset.open = 'true';
+    back.sync();
   }
   function closePanel(el) {
     el.dataset.open = 'false';
     clearTimeout(el._h); el._h = setTimeout(() => { if (el.dataset.open !== 'true') el.hidden = true; }, 260);
+    back.sync();
   }
+
+  /* Nút Back / vuốt quay lại của điện thoại: đóng lớp đang mở trên cùng thay vì thoát app.
+     Khi có lớp mở, app thêm một mục vào lịch sử trình duyệt; Back lấy mục đó ra và đóng lớp. */
+  const back = {
+    armed: false, skip: false, t: 0,
+    top() {
+      if (!$('viewer').hidden) return closeViewer;
+      if (isOpen($('stSheet'))) return closeStatus;
+      if (isOpen($('near'))) return closeNear;
+      if (isOpen($('inspect'))) return closeInspect;
+      if (isOpen($('detail'))) return closeDetail;
+      if (isOpen($('peek'))) return hidePeek;
+      if (isOpen($('snap'))) return hideSnap;
+      if (isPhone() && app.dataset.view !== 'map') return () => goView('map');
+      return null;
+    },
+    sync() { clearTimeout(back.t); back.t = setTimeout(back.apply, 0); },   // chờ các lớp mở/đóng xong trong cùng một lần bấm
+    apply() {
+      const need = !!back.top();
+      if (need && !back.armed) { history.pushState({ layer: 1 }, ''); back.armed = true; }
+      else if (!need && back.armed) { back.armed = false; back.skip = true; history.back(); }   // đóng bằng nút trên màn hình: bỏ mục thừa
+    }
+  };
+  window.addEventListener('popstate', () => {
+    if (back.skip) { back.skip = false; return; }
+    back.armed = false;
+    const close = back.top();
+    if (close) close();
+    back.sync();
+  });
   const isOpen = el => el.dataset.open === 'true';
   function dirUrl(p) {
     return p.loc ? 'https://www.google.com/maps/dir/?api=1&destination=' + p.loc.lat + ',' + p.loc.lng + '&travelmode=driving'
@@ -1205,10 +1237,10 @@
     { key: 'tum', label: 'Thi công tum', group: 'tum' },
     { key: 'hoanthien', label: 'Hoàn thiện', group: 'hoanthien' },
     { key: 'dung', label: 'Dừng thi công', group: 'dung' },
-    { key: 'hoanthanh', label: 'Hoàn thành', group: 'xong' },
+    { key: 'hoanthanh', label: 'Hoàn thành, xong', group: 'xong' },
     { key: 'sudung', label: 'Đã đưa vào sử dụng', group: 'xong' }
   ];
-  const STAGE_DEFAULT = ['phado', 'mong', 'ham', 'tang', 'tum', 'hoanthien'];
+  const STAGE_DEFAULT = ['chua', 'phado', 'mong', 'ham', 'tang', 'tum', 'hoanthien', 'dung'];   // mặc định: mọi hiện trạng trừ đã xong (anh chốt 27/10)
   const KINDS = [{ key: 'xd', label: 'Xây mới (GPXD)' }, { key: 'sc', label: 'Cải tạo, sửa chữa (GPSC)' }];
 
   /** Giai đoạn chi tiết hơn nhóm màu, dùng cho bộ lọc hiện trạng của trang danh sách. */
@@ -1217,7 +1249,7 @@
     if (!s) return p.tbkc && !p.start ? 'chua' : 'tang';
     if (s.indexOf('dua vao su dung') >= 0) return 'sudung';
     if (s.indexOf('dung') >= 0 && s.indexOf('su dung') < 0) return 'dung';
-    if (s === 'xong' || s.indexOf('hoan thanh') >= 0) return 'hoanthanh';
+    if (s === 'xong' || s === 'da xong' || s.indexOf('hoan thanh') >= 0) return 'hoanthanh';
     if (s.indexOf('hoan thien') >= 0) return 'hoanthien';
     if (s.indexOf('chua thi cong') >= 0) return 'chua';
     if (s.indexOf('pha do') >= 0 || s.indexOf('thao do') >= 0) return 'phado';
@@ -1234,13 +1266,26 @@
     return '';
   }
 
-  const lf = { stages: new Set(STAGE_DEFAULT), areas: null, kinds: new Set(['xd', 'sc']), noLoc: false, q: '' };
+  const lf = { stages: new Set(STAGE_DEFAULT), areas: new Set(), kinds: new Set(), noLoc: false, q: '', sort: 'start', dir: -1 };
+  // Cột sắp xếp được: bấm lần nữa để đảo chiều. Công trình thiếu giá trị luôn xếp cuối.
+  const STAGE_ORDER = STAGES.map(st => st.key);
+  const SORTS = {
+    id: { dir: 1, val: p => { const m = String(p.id).match(/^(\d{4})-(\d+)$/); return m ? Number(m[1]) * 1e4 + Number(m[2]) : null; } },
+    start: { dir: -1, val: p => dateValue(p.start) || dateValue(p.tbkc) || null },
+    status: { dir: 1, val: p => STAGE_ORDER.indexOf(stageOf(p)) },
+    upd: { dir: -1, val: p => lastTime(p) || null }
+  };
+  function lpSorted(list) {
+    const f = SORTS[lf.sort].val, d = lf.dir;
+    return list.map(p => [p, f(p)]).sort((a, b) => a[1] == null ? (b[1] == null ? 0 : 1) : b[1] == null ? -1 : (a[1] - b[1]) * d).map(x => x[0]);
+  }
   const allAreas = () => (CONF.areas || []).map(a => a.code);
-  function lpReset() { lf.stages = new Set(STAGE_DEFAULT); lf.areas = new Set(allAreas()); lf.kinds = new Set(['xd', 'sc']); lf.noLoc = false; }
+  function lpReset() { lf.stages = new Set(STAGE_DEFAULT); lf.areas = new Set(); lf.kinds = new Set(); lf.noLoc = false; }   // khu vực, loại: không tick = tất cả
   function lpMatch(p, ignore) {
-    if (ignore !== 'stages' && !lf.stages.has(stageOf(p))) return false;
-    if (ignore !== 'areas' && lf.areas.size < allAreas().length && !lf.areas.has(p.area)) return false;
-    if (ignore !== 'kinds' && lf.kinds.size < KINDS.length && !lf.kinds.has(kindOf(p))) return false;
+    // Mục không tick ô nào = không lọc theo mục đó (hiện tất cả)
+    if (ignore !== 'stages' && lf.stages.size && !lf.stages.has(stageOf(p))) return false;
+    if (ignore !== 'areas' && lf.areas.size && lf.areas.size < allAreas().length && !lf.areas.has(p.area)) return false;
+    if (ignore !== 'kinds' && lf.kinds.size && lf.kinds.size < KINDS.length && !lf.kinds.has(kindOf(p))) return false;
     if (ignore !== 'noLoc' && lf.noLoc && p.loc) return false;
     if (lf.q) {
       const hay = norm([p.id, p.owner, p.address, p.gpxd, p.phone, p.status].join(' '));
@@ -1254,13 +1299,30 @@
     return '<label class="lp-item"><input type="checkbox" data-g="' + group + '" data-k="' + esc(key) + '"' + (on ? ' checked' : '') + '>' +
       '<span class="lp-box">' + CHECK + '</span>' + (dotHtml || '') + '<span class="lp-label">' + esc(label) + '</span><span class="lp-n" data-n="' + group + ':' + esc(key) + '"></span></label>';
   }
+  const legend = (g, text) => '<legend><span>' + text + '</span><button type="button" class="lp-clear" data-clear="' + g + '">Bỏ lọc</button></legend>';
   function renderLpFilters() {
     $('lpGroups').innerHTML =
-      '<fieldset class="lp-group"><legend>Hiện trạng</legend>' + STAGES.map(st => lpItem('stages', st.key, st.label, lf.stages.has(st.key), dot(st.group))).join('') + '</fieldset>' +
-      '<fieldset class="lp-group"><legend>Khu vực</legend>' + (CONF.areas || []).map(a => lpItem('areas', a.code, 'Khu ' + a.code, lf.areas.has(a.code))).join('') + '</fieldset>' +
-      '<fieldset class="lp-group"><legend>Loại công trình</legend>' + KINDS.map(k => lpItem('kinds', k.key, k.label, lf.kinds.has(k.key))).join('') + '</fieldset>' +
-      '<fieldset class="lp-group"><legend>Vị trí</legend>' + lpItem('noLoc', '1', 'Chưa có vị trí', lf.noLoc) + '</fieldset>';
+      '<fieldset class="lp-group">' + legend('stages', 'Hiện trạng') + STAGES.map(st => lpItem('stages', st.key, st.label, lf.stages.has(st.key), dot(st.group))).join('') + '</fieldset>' +
+      '<fieldset class="lp-group">' + legend('areas', 'Khu vực') + (CONF.areas || []).map(a => lpItem('areas', a.code, 'Khu ' + a.code, lf.areas.has(a.code))).join('') + '</fieldset>' +
+      '<fieldset class="lp-group">' + legend('kinds', 'Loại công trình') + KINDS.map(k => lpItem('kinds', k.key, k.label, lf.kinds.has(k.key))).join('') + '</fieldset>' +
+      '<fieldset class="lp-group">' + legend('noLoc', 'Vị trí') + lpItem('noLoc', '1', 'Chưa có vị trí', lf.noLoc) + '</fieldset>';
+    lpClearButtons();
   }
+  /** Nút "Bỏ lọc": bỏ tick mọi ô của mục đó (anh góp ý 27/10), mục không tick ô nào thì hiện tất cả; muốn xem một loại chỉ cần tick đúng ô đó. */
+  function lpClearButtons() {
+    const ticked = { stages: lf.stages.size > 0, areas: lf.areas.size > 0, kinds: lf.kinds.size > 0, noLoc: lf.noLoc };
+    $('lpGroups').querySelectorAll('[data-clear]').forEach(b => { b.hidden = !ticked[b.dataset.clear]; });
+    $('lpClearAll').hidden = !Object.values(ticked).some(Boolean);
+  }
+  function lpClear(g) {
+    if (g === 'stages' || g === 'all') lf.stages = new Set();
+    if (g === 'areas' || g === 'all') lf.areas = new Set();
+    if (g === 'kinds' || g === 'all') lf.kinds = new Set();
+    if (g === 'noLoc' || g === 'all') lf.noLoc = false;
+    renderLpFilters(); renderListPage(true);
+  }
+  $('lpGroups').addEventListener('click', e => { const b = e.target.closest('[data-clear]'); if (b) lpClear(b.dataset.clear); });
+  $('lpClearAll').onclick = () => lpClear('all');
   function renderLpCounts() {
     const by = (ignore, fn) => state.projects.filter(p => lpMatch(p, ignore) && fn(p)).length;
     $('lpGroups').querySelectorAll('[data-n]').forEach(el => {
@@ -1274,21 +1336,26 @@
   function lpSummary() {
     const tags = [];
     const isDefault = lf.stages.size === STAGE_DEFAULT.length && STAGE_DEFAULT.every(k => lf.stages.has(k));
-    tags.push({ g: 'stages', text: isDefault ? 'Đang thi công + Hoàn thiện' : lf.stages.size === STAGES.length ? 'Mọi hiện trạng' : lf.stages.size + ' hiện trạng', reset: !isDefault });
-    const allA = lf.areas.size === allAreas().length;
-    tags.push({ g: 'areas', text: allA ? 'Mọi khu' : lf.areas.size ? 'Khu ' + Array.from(lf.areas).join(', ') : 'Chưa chọn khu', reset: !allA });
-    const allK = lf.kinds.size === KINDS.length;
-    tags.push({ g: 'kinds', text: allK ? 'Mọi loại' : lf.kinds.size ? KINDS.find(k => lf.kinds.has(k.key)).label : 'Chưa chọn loại', reset: !allK });
+    const allS = !lf.stages.size || lf.stages.size === STAGES.length;
+    tags.push({ g: 'stages', text: isDefault ? 'Chưa xong' : allS ? 'Mọi hiện trạng' : lf.stages.size === 1 ? STAGES.find(st => lf.stages.has(st.key)).label : lf.stages.size + ' hiện trạng', reset: !isDefault });
+    const allA = !lf.areas.size || lf.areas.size === allAreas().length;
+    tags.push({ g: 'areas', text: allA ? 'Mọi khu' : 'Khu ' + Array.from(lf.areas).join(', '), reset: !allA });
+    const allK = !lf.kinds.size || lf.kinds.size === KINDS.length;
+    tags.push({ g: 'kinds', text: allK ? 'Mọi loại' : KINDS.find(k => lf.kinds.has(k.key)).label, reset: !allK });
     if (lf.noLoc) tags.push({ g: 'noLoc', text: 'Chưa có vị trí', reset: true });
     $('lpActive').innerHTML = tags.map(t => '<span class="lp-tag">' + esc(t.text) +
       (t.reset ? '<button type="button" data-reset="' + t.g + '" aria-label="Bỏ lọc ' + esc(t.text) + '">×</button>' : '') + '</span>').join('');
   }
   function renderListPage(animate) {
-    if (!lf.areas) lf.areas = new Set(allAreas());
     if (!$('lpGroups').children.length) renderLpFilters();
-    renderLpCounts(); lpSummary();
-    const list = state.projects.filter(p => lpMatch(p))
-      .sort((a, b) => (dateValue(b.start) || dateValue(b.tbkc)) - (dateValue(a.start) || dateValue(a.tbkc)));
+    renderLpCounts(); lpSummary(); lpClearButtons();
+    const list = lpSorted(state.projects.filter(p => lpMatch(p)));
+    document.querySelectorAll('.lp-table th[data-sort]').forEach(th => {
+      const on = th.dataset.sort === lf.sort;
+      th.classList.toggle('on', on);
+      th.setAttribute('aria-sort', on ? (lf.dir < 0 ? 'descending' : 'ascending') : 'none');
+      th.querySelector('.arr').textContent = on ? (lf.dir < 0 ? '↓' : '↑') : '';
+    });
     $('lpCount').innerHTML = '<b class="num">' + list.length + '</b> / ' + state.projects.length + ' công trình';
     if (!list.length) {
       $('lpRows').innerHTML = '<tr><td colspan="9" class="lp-empty">Không có công trình nào khớp bộ lọc.</td></tr>';
@@ -1319,12 +1386,18 @@
     else c.checked ? lf[g].add(k) : lf[g].delete(k);
     renderListPage(true);
   });
+  document.querySelector('.lp-table thead').addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]'); if (!th) return;
+    const k = th.dataset.sort;
+    lf.dir = lf.sort === k ? -lf.dir : SORTS[k].dir; lf.sort = k;
+    renderListPage(true);
+  });
   $('lpActive').addEventListener('click', e => {
     const b = e.target.closest('[data-reset]'); if (!b) return;
     const g = b.dataset.reset;
     if (g === 'stages') lf.stages = new Set(STAGE_DEFAULT);
-    if (g === 'areas') lf.areas = new Set(allAreas());
-    if (g === 'kinds') lf.kinds = new Set(['xd', 'sc']);
+    if (g === 'areas') lf.areas = new Set();
+    if (g === 'kinds') lf.kinds = new Set();
     if (g === 'noLoc') lf.noLoc = false;
     renderLpFilters(); renderListPage();
   });
@@ -1476,8 +1549,10 @@
     const v = $('viewer');
     v.innerHTML = '<img alt="Ảnh hiện trường" src="' + url + '"><button type="button" class="icon-btn solid close" aria-label="Đóng">✕</button>';
     v.hidden = false;
-    v.onclick = () => { v.hidden = true; v.innerHTML = ''; };
+    v.onclick = closeViewer;
+    back.sync();
   }
+  function closeViewer() { const v = $('viewer'); v.hidden = true; v.innerHTML = ''; back.sync(); }
 
   /* ---------------- Kiểm tra hiện trường ---------------- */
 
@@ -1689,13 +1764,14 @@
     hidePeek();
     if (view === 'map' && state.engine) setTimeout(() => state.engine.resize(), 50);
     if (view === 'list') renderList(true);
+    back.sync();
   }
   document.querySelector('.bottombar').addEventListener('click', e => {
     const b = e.target.closest('[data-go]'); if (b) goView(b.dataset.go);
   });
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (!$('viewer').hidden) { $('viewer').hidden = true; return; }
+    if (!$('viewer').hidden) { closeViewer(); return; }
     if (isOpen($('stSheet'))) { closeStatus(); return; }
     if (isOpen($('near'))) { closeNear(); return; }
     if (isOpen($('inspect'))) { closeInspect(); return; }

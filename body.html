@@ -90,7 +90,7 @@
     <!-- Trang danh sách công trình (máy tính) -->
     <div class="listpage" id="pageList">
       <aside class="lp-filters" aria-label="Bộ lọc">
-        <div class="lp-head"><span>Bộ lọc</span><button type="button" class="textbtn" id="lpReset">Về mặc định</button></div>
+        <div class="lp-head"><span>Bộ lọc</span><span class="lp-head-acts"><button type="button" class="textbtn" id="lpClearAll">Bỏ lọc tất cả</button><button type="button" class="textbtn" id="lpReset">Về mặc định</button></span></div>
         <div id="lpGroups"></div>
       </aside>
       <section class="lp-main" aria-label="Danh sách công trình">
@@ -104,7 +104,7 @@
         </div>
         <div class="lp-tablewrap">
           <table class="lp-table">
-            <thead><tr><th>ID</th><th>Chủ đầu tư</th><th>Địa chỉ xây dựng</th><th>Giấy phép</th><th>Quy mô</th><th class="on">Ngày thi công ↓</th><th>Hiện trạng</th><th>Cập nhật</th><th>Vị trí</th></tr></thead>
+            <thead><tr><th data-sort="id" title="Sắp xếp theo ID">ID <span class="arr"></span></th><th>Chủ đầu tư</th><th>Địa chỉ xây dựng</th><th>Giấy phép</th><th>Quy mô</th><th data-sort="start" title="Sắp xếp theo ngày thi công">Ngày thi công <span class="arr"></span></th><th data-sort="status" title="Sắp xếp theo hiện trạng">Hiện trạng <span class="arr"></span></th><th data-sort="upd" title="Sắp xếp theo lần cập nhật gần nhất">Cập nhật <span class="arr"></span></th><th>Vị trí</th></tr></thead>
             <tbody id="lpRows"></tbody>
           </table>
         </div>

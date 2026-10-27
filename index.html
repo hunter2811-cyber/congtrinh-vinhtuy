@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=3528959f8ed3">
+  <link rel="stylesheet" href="styles.css?v=2a4d48ca3b48">
 </head>
 <body>
   <div id="app" class="app" data-view="map" data-page="map">
@@ -117,7 +117,7 @@
     <!-- Trang danh sách công trình (máy tính) -->
     <div class="listpage" id="pageList">
       <aside class="lp-filters" aria-label="Bộ lọc">
-        <div class="lp-head"><span>Bộ lọc</span><button type="button" class="textbtn" id="lpReset">Về mặc định</button></div>
+        <div class="lp-head"><span>Bộ lọc</span><span class="lp-head-acts"><button type="button" class="textbtn" id="lpClearAll">Bỏ lọc tất cả</button><button type="button" class="textbtn" id="lpReset">Về mặc định</button></span></div>
         <div id="lpGroups"></div>
       </aside>
       <section class="lp-main" aria-label="Danh sách công trình">
@@ -131,7 +131,7 @@
         </div>
         <div class="lp-tablewrap">
           <table class="lp-table">
-            <thead><tr><th>ID</th><th>Chủ đầu tư</th><th>Địa chỉ xây dựng</th><th>Giấy phép</th><th>Quy mô</th><th class="on">Ngày thi công ↓</th><th>Hiện trạng</th><th>Cập nhật</th><th>Vị trí</th></tr></thead>
+            <thead><tr><th data-sort="id" title="Sắp xếp theo ID">ID <span class="arr"></span></th><th>Chủ đầu tư</th><th>Địa chỉ xây dựng</th><th>Giấy phép</th><th>Quy mô</th><th data-sort="start" title="Sắp xếp theo ngày thi công">Ngày thi công <span class="arr"></span></th><th data-sort="status" title="Sắp xếp theo hiện trạng">Hiện trạng <span class="arr"></span></th><th data-sort="upd" title="Sắp xếp theo lần cập nhật gần nhất">Cập nhật <span class="arr"></span></th><th>Vị trí</th></tr></thead>
             <tbody id="lpRows"></tbody>
           </table>
         </div>
@@ -201,9 +201,9 @@
 
   <datalist id="statusList"></datalist>
 
-  <script src="config.js?v=3528959f8ed3"></script>
+  <script src="config.js?v=2a4d48ca3b48"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-  <script src="app.js?v=3528959f8ed3"></script>
+  <script src="app.js?v=2a4d48ca3b48"></script>
 </body>
 </html>
