@@ -51,7 +51,7 @@
   const auth = {
     get session() { return store.get('session'); },
     save(d) { store.set('session', d.session); store.set('sessionUser', JSON.stringify(d.user || {})); },
-    clear() { try { localStorage.removeItem('session'); localStorage.removeItem('sessionUser'); } catch (e) { /* bỏ qua */ } }
+    clear() { try { ['session', 'sessionUser', 'snap'].forEach(k => localStorage.removeItem(k)); } catch (e) { /* bỏ qua */ } }
   };
   class ApiError extends Error {}
 
@@ -215,29 +215,40 @@
 
   /* ---------------- Dữ liệu ---------------- */
 
-  function load() {
-    renderSkeleton();
+  // Bản trên GitHub giữ lại dữ liệu lần trước để mở app là có ngay bản đồ, rồi mới lấy dữ liệu mới từ máy chủ (máy chủ mất vài giây).
+  const snap = {
+    read() { try { return viaScriptRun ? null : JSON.parse(store.get('snap')); } catch (e) { return null; } },
+    save(res) { if (!viaScriptRun) store.set('snap', JSON.stringify(res)); }
+  };
+  function load(fresh) {
+    const old = fresh === true ? null : snap.read();
+    if (old && old.projects) apply(old); else renderSkeleton();
     return call('apiBootstrap').then(res => {
       if (res.error) return renderGate(res.error);   // trang Apps Script cũ trả lỗi trong kết quả
-      state.user = res.user;
-      res.projects.forEach(p => { p.owner = displayOwner(p.owner); });
-      state.projects = res.projects;
-      state.byId = Object.fromEntries(res.projects.map(p => [p.id, p]));
-      $('stamp').textContent = 'Dữ liệu lúc ' + res.loadedAt.slice(-5);
-      $('user').innerHTML = '<b>' + esc(res.user.name) + '</b><span>' + (res.user.role === 'admin' ? 'Quản trị' : 'Cán bộ hiện trường') + '</span>';
-      renderFilters(); renderList(); renderMarkers(); updateNear();
-      if (app.dataset.page === 'list') renderListPage();
-      if (state.selected && state.byId[state.selected] && isOpen($('detail'))) openDetail(state.selected);
-      if (!viaScriptRun) {
-        if (install.prompt) install.show('android');
-        else if (install.ios()) setTimeout(() => install.show('ios'), 1500);
-      }
+      snap.save(res);
+      apply(res);
     }).catch(err => {
       if (err instanceof ApiError && (err.message === 'AUTH' || /^NO_ACCESS/.test(err.message))) return;   // đã chuyển sang màn hình đăng nhập / chưa được cấp quyền
+      if (old && old.projects) { $('stamp').textContent = 'Chưa tải được dữ liệu mới · lúc ' + old.loadedAt.slice(-5); return; }
       $('rows').innerHTML = '<li class="empty">Không tải được danh sách công trình. ' + esc(err && err.message || err) +
         '<br><button class="textbtn" type="button" id="retry">Thử lại</button></li>';
-      $('retry').onclick = load;
+      $('retry').onclick = () => load(true);
     });
+  }
+  function apply(res) {
+    state.user = res.user;
+    res.projects.forEach(p => { p.owner = displayOwner(p.owner); });
+    state.projects = res.projects;
+    state.byId = Object.fromEntries(res.projects.map(p => [p.id, p]));
+    $('stamp').textContent = 'Dữ liệu lúc ' + res.loadedAt.slice(-5);
+    $('user').innerHTML = '<b>' + esc(res.user.name) + '</b><span>' + (res.user.role === 'admin' ? 'Quản trị' : 'Cán bộ hiện trường') + '</span>';
+    renderFilters(); renderList(); renderMarkers(); updateNear();
+    if (app.dataset.page === 'list') renderListPage();
+    if (state.selected && state.byId[state.selected] && isOpen($('detail'))) openDetail(state.selected);
+    if (!viaScriptRun) {
+      if (install.prompt) install.show('android');
+      else if (install.ios()) setTimeout(() => install.show('ios'), 1500);
+    }
   }
 
   function renderGate(code) {
@@ -529,7 +540,7 @@
       },
       setBase(base) {
         if (this.tiles) this.tiles.remove();
-        this.tiles = L.tileLayer(OSM_TILES[styleKey(base)].url, { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(this.m);
+        this.tiles = L.tileLayer(OSM_TILES[styleKey(base)].url, { maxZoom: 19, crossOrigin: true, keepBuffer: 4, updateWhenZooming: false, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(this.m);
         this.tiles.bringToBack();
         this.el.classList.toggle('base-ro', base === 'ro');
         this.el.classList.toggle('base-toi', base === 'toi');
@@ -1690,7 +1701,7 @@
     if (isOpen($('inspect'))) { closeInspect(); return; }
     if (isOpen($('detail'))) closeDetail();
   });
-  $('btnRefresh').onclick = load;
+  $('btnRefresh').onclick = () => load(true);
   window.addEventListener('resize', () => { if (state.engine) state.engine.resize(); movePill(false); });
 
   $('statusList').innerHTML = (CONF.suggestions || []).map(s => '<option value="' + esc(s) + '">').join('');
