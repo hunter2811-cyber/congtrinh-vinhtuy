@@ -204,7 +204,6 @@ button { cursor: pointer; }
 .peek-owner { font-weight: 600; font-size: 15px; }
 .peek-sub { color: var(--muted); margin-top: 2px; }
 .peek-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-.peek-actions .primary { grid-column: 1 / -1; }
 .btn svg { flex: none; }
 
 /* Leaflet trên nền tối */
@@ -252,6 +251,10 @@ button { cursor: pointer; }
 .d-actions .primary { grid-column: 1 / -1; }
 
 .card { margin-top: var(--gap); padding: 16px 18px; border-radius: var(--radius-card); background: var(--surface); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.card-head h2 { margin: 0 !important; }
+.status-edit { height: 34px; padding: 0 12px; gap: 6px; font-size: 13px; }
+.status-edit svg { width: 16px; height: 16px; }
 .card h2 { margin: 0 0 10px; font-size: var(--fs-section); line-height: 22px; font-weight: 600; }
 .card .hint { color: var(--faint); font-size: var(--fs-small); margin-top: 6px; line-height: 16px; }
 .status-now { font-size: 18px; line-height: 24px; font-weight: 500; }
@@ -405,6 +408,7 @@ textarea.input { min-height: 88px; resize: vertical; }
 .near-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .near-text .row-owner { white-space: nowrap; }
 .near-st { color: var(--muted); font-size: 13px; }
+.near-stbtn { width: 48px; height: 48px; flex: none; border-radius: 999px; border: 1px solid var(--control); background: transparent; color: var(--text); display: grid; place-items: center; }
 .near-cam { width: 48px; height: 48px; flex: none; border-radius: 999px; border: 0; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; }
 .near-empty { padding: 10px 6px 6px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13px; }
 
@@ -477,7 +481,7 @@ textarea.input { min-height: 88px; resize: vertical; }
 .bottombar { display: none; }
 /* Máy tính chỉ để xem: ẩn gọi, chỉ đường, chụp ảnh */
 @media (min-width: 900px) {
-  .row-acts, .d-actions { display: none !important; }
+  .row-acts, .d-actions, .status-edit { display: none !important; }
 }
 
 /* Điện thoại */

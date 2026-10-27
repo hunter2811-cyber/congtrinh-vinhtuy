@@ -30,6 +30,7 @@
   const isPhone = () => window.matchMedia('(max-width: 899px)').matches;
   const calm = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches || !window.gsap;
   const ICON = {
+    status: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 4.5H7A1.5 1.5 0 0 0 5.5 6v13A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V6A1.5 1.5 0 0 0 17 4.5h-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><rect x="9" y="3" width="6" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 13l2 2 4-4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     call: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6.6 3.8h2.6l1.4 3.7-1.9 1.3a10.6 10.6 0 0 0 4.5 4.5l1.3-1.9 3.7 1.4v2.6a2 2 0 0 1-2.1 2A14.4 14.4 0 0 1 4.6 5.9a2 2 0 0 1 2-2.1z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
     clock: '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -979,11 +980,13 @@
       '<div class="d-tags"><span class="pill ' + p.group + '">' + esc(p.status || '—') + '</span><span class="pill num">' + esc(p.id) + '</span>' +
         (state.me && p.loc ? '<span class="pill num">cách ' + fmtDist(meters(state.me, p.loc)) + '</span>' : '') + '</div>' +
       '<div class="peek-actions"><button type="button" class="btn primary big" data-act="cam">' + ICON.cam + 'Chụp ảnh</button>' +
+        '<button type="button" class="btn big" data-act="status">' + ICON.status + 'Hiện trạng</button>' +
         '<a class="btn big" href="' + dirUrl(p) + '" target="_blank" rel="noopener">' + ICON.dir + 'Chỉ đường</a>' +
         '<button type="button" class="btn big" data-act="detail">Hồ sơ</button></div>';
     openPanel(el); $('nearFab').hidden = true;
     el.querySelector('[data-act="cam"]').onclick = () => { hidePeek(); quickPhoto(p.id); };
     el.querySelector('[data-act="detail"]').onclick = () => { hidePeek(); openDetail(p.id); };
+    el.querySelector('[data-act="status"]').onclick = () => { hidePeek(); openStatus(p.id); };   // cập nhật hiện trạng không cần chụp ảnh
   }
   function hidePeek() { const el = $('peek'); if (!el.hidden) closePanel(el); if (!isOpen($('near'))) $('nearFab').hidden = false; }
 
@@ -1024,6 +1027,7 @@
               '<span class="row-sub">' + esc(p.address) + '</span>' +
               '<span class="near-st">' + esc(p.status || '—') + ' · cách ' + Math.round(meters(state.me, p.loc)) + ' m</span>' +
               agoLine(p) + '</span></button>' +
+            '<button type="button" class="near-stbtn" data-status="' + esc(p.id) + '" aria-label="Cập nhật hiện trạng ' + esc(p.owner) + '">' + ICON.status + '</button>' +
             '<button type="button" class="near-cam" data-snap="' + esc(p.id) + '" aria-label="Chụp ảnh ' + esc(p.owner) + '">' + ICON.cam + '</button>' +
           '</div>').join('');
     $('near').innerHTML = '<span class="grab" aria-hidden="true"></span>' +
@@ -1040,6 +1044,8 @@
   $('nearFab').onclick = openNear;
   $('near').addEventListener('click', e => {
     if (e.target.closest('[data-close]')) { closeNear(); return; }
+    const st = e.target.closest('[data-status]');
+    if (st) { closeNear(); openStatus(st.dataset.status); return; }
     const cam = e.target.closest('[data-snap]');
     if (cam) { snapPhoto(cam.dataset.snap); return; }
     const o = e.target.closest('[data-open]');
@@ -1488,7 +1494,7 @@
         '<div class="d-actions"><button type="button" class="btn primary big" data-inspect>' + ICON.cam + 'Chụp ảnh và kiểm tra</button>' +
           '<a class="btn big" href="' + dirUrl(p) + '" target="_blank" rel="noopener">' + ICON.dir + 'Chỉ đường</a>' +
           (p.phone ? '<a class="btn big" href="tel:' + esc(p.phone.split(/\s|\n/)[0].replace(/[^\d+]/g, '')) + '">Gọi chủ đầu tư</a>' : '<span></span>') + '</div>' +
-        '<div class="card"><h2>Hiện trạng</h2><div class="status-now">' + esc(p.status || '—') + '</div><div class="status-src">' + src + '</div></div>' +
+        '<div class="card"><div class="card-head"><h2>Hiện trạng</h2><button type="button" class="btn small status-edit" data-status>' + ICON.status + 'Cập nhật</button></div><div class="status-now">' + esc(p.status || '—') + '</div><div class="status-src">' + src + '</div></div>' +
         '<div class="card"><h2>Biên bản kiểm tra</h2>' + ladder(p) + '</div>' +
         '<div class="card"><h2>Giấy phép và quy mô</h2><dl class="kv">' +
           kv('Số GPXD', esc(p.gpxd) + (p.gpxdDate ? ' ngày ' + esc(p.gpxdDate) : '')) +
@@ -1510,6 +1516,7 @@
     el.querySelector('.sheet-body').scrollTop = 0;
     el.querySelector('[data-close]').onclick = closeDetail;
     el.querySelector('[data-inspect]').onclick = () => openInspect(p.id, { camera: true });
+    el.querySelector('.status-edit').onclick = () => openStatus(p.id);
     loadHistory(p.id);
   }
   function closeDetail() { closePanel($('detail')); }
