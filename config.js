@@ -3,7 +3,7 @@ window.APP_CONFIG = {
   // Link triển khai Web App của Apps Script (tài khoản vinhtuyttxd)
   apiUrl: 'https://script.google.com/macros/s/AKfycbwVpEmvYg9mrv2pExZEhbTLW35hhtgL3DdZoGVzXYH8qYBIsKhRc6fssDEpL0tK1P90rg/exec',
   // Mã ứng dụng OAuth (Google Cloud của vinhtuyttxd), phải trùng OAUTH_CLIENT_ID trong Config.gs
-  clientId: 'DIEN_MA_CLIENT_ID_VAO_DAY',
+  clientId: '358506108957-bkh4mnef4fkd2nsvut1os0tvpct017q0.apps.googleusercontent.com',
   // Địa chỉ trang app, cũng là địa chỉ Google chuyển về sau khi đăng nhập
   appUrl: 'https://hunter2811-cyber.github.io/congtrinh-vinhtuy/',
   mapsKey: '',
