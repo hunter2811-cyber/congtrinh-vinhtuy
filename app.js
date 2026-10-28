@@ -1505,7 +1505,10 @@
   function reportSteps(p) {
     const out = [];
     if (p.tbkc) out.push('TBKC: ' + p.tbkc);
-    (p.checks || []).forEach((c, i) => { const d = c.bb || c.tb; if (d) out.push('KT lần ' + (i + 1) + ': ' + d); });
+    (p.checks || []).forEach((c, i) => {
+      if (/^x$/i.test(String(c.bb || '').trim())) return;   // biên bản ghi "x" thì không đưa lần kiểm tra đó vào báo cáo (anh dặn 28/10)
+      const d = c.bb || c.tb; if (d) out.push('KT lần ' + (i + 1) + ': ' + d);
+    });
     return out.join('\n');
   }
   function reportData() {
@@ -1531,7 +1534,7 @@
       rows: (by[s.key] || []).sort((a, b) => order(a) - order(b) || idNum(a) - idNum(b)).map(p => ({
         id: p.id, tt: ++tt, owners: reportOwners(p), address: p.address,
         permit: [p.gpxd, p.gpxdDate ? 'ngày ' + p.gpxdDate : ''].filter(Boolean).join(' '),
-        scale: p.scale, status: p.status || '', steps: reportSteps(p), note: p.note || ''
+        scale: p.scale, status: p.status || '', steps: reportSteps(p), note: ''   // cột Ghi chú để trống, không lấy từ file dữ liệu
       }))
     }));
     const total = rows.length, notice = (by.IV || []).length;
