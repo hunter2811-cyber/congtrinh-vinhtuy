@@ -1545,7 +1545,7 @@
     if (!rp.from) setReportWeek(0, true);
     const d = reportData();
     $('rpStats').innerHTML = [
-      [d.total, 'Tổng số công trình'], [d.legal, 'Đúng phép'], [d.building, 'Đang thi công'], [d.notice, 'Đã TB khởi công']
+      [d.total, 'Tổng số công trình'], [d.legal, 'Đúng phép'], [d.building, 'Đang thi công'], [d.notice, 'Chưa khởi công']
     ].map(x => '<div class="rp-stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('');
     $('rpViol').innerHTML = 'Vi phạm: ' + d.wrong + ' sai phép + ' + d.unlicensed + ' không phép = <b>' + (d.wrong + d.unlicensed) + '</b> công trình';
     $('rpInfo').textContent = d.total + ' công trình';
