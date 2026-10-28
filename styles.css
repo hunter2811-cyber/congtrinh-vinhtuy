@@ -672,6 +672,32 @@ textarea.input { min-height: 88px; resize: vertical; }
 .cv-owners span { display: block; }
 .cv-owners span + span { margin-top: 8pt; }
 .cv-lines .empty { color: #9a9a9a; font-weight: 400; }
+/* Biên bản kiểm tra: 2 tờ A4, lề T/P/D 1,5cm, trái 2,5cm, chữ 14 dòng 18pt như mẫu Word */
+.pd-paper.bbp { position: relative; padding: 15mm 15mm 15mm 25mm; font-size: 14pt; line-height: 18pt; }
+.bbp .b { font-weight: 700; } .bbp sup { font-size: .65em; line-height: 0; vertical-align: .6em; }
+.bbp p, .bbp .bl, .bbp .bmem { margin: 0; padding: var(--bb-gap, 3pt) 0; text-indent: 10mm; }
+.bbp p.j { text-align: justify; }
+.bbp .bhd { display: grid; grid-template-columns: 50% 50%; text-align: center; font-size: 13pt; line-height: 1.25; text-indent: 0; margin-left: -16mm; margin-right: -6mm; letter-spacing: -.4pt; white-space: nowrap; }
+.bbp .bhd .big { font-size: 14pt; }
+.bbp .bhd .rule { display: block; height: 0; border-top: 1px solid #000; margin: 2px auto 0; }
+.bbp .bdate { text-align: right; font-style: italic; font-size: 13pt; margin: 10pt 0 14pt; }
+.bbp .btitle { text-align: center; font-weight: 700; line-height: 1.3; margin: 0 0 14pt; }
+.bbp .bl { display: flex; align-items: baseline; text-indent: 0; padding-left: 10mm; }
+.bbp .bl > span:first-child { white-space: nowrap; }
+.bbp .bl .fill { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; margin-left: 2px; }
+.bbp .bl .fill:empty::after { content: ".............................................................................................................................................................................................................."; letter-spacing: 1px; }
+.bbp .bl.full { padding-left: 0; }
+.bbp .bmem { display: flex; text-indent: 0; padding-left: 10mm; }
+.bbp .bmem .bm1 { width: 72mm; flex: none; white-space: nowrap; }
+.bbp .bmem .dotline::after { content: "…………………………….."; }
+.bbp .bmem .bm1.dotline::after { content: "……………………..."; }
+.bbp .bsign { display: grid; grid-template-columns: 1fr 1fr; text-align: center; margin-top: 6pt; margin-left: -10mm; line-height: 1.3; }
+.bbp .bchair { text-align: center; margin-top: 33.6mm; margin-left: -10mm; }
+.bbp .bchair .bname { margin-top: 21.6mm; }
+.bbp .bmembers { margin-top: 4mm; line-height: 1.5; }
+.bbp .bmembers .bl { padding: 0; }
+.bbp .pno { position: absolute; right: 15mm; bottom: 8mm; font-size: 11pt; }
+.bbp .empty { color: #9a9a9a; }
 @page biahs { size: A4 portrait; margin: 0; }
 @media print {
   html.in-ho-so, html.in-ho-so body { height: auto !important; background: #fff !important; overflow: visible !important; }
@@ -680,4 +706,6 @@ textarea.input { min-height: 88px; resize: vertical; }
   html.in-ho-so .pd-paper { page: biahs; margin: 0 !important; box-shadow: none !important; transform: none !important; height: 296mm; overflow: hidden; }
   html.in-ho-so .pd-paper [contenteditable] { background: none !important; }
   html.in-ho-so .cv-lines .empty { color: #000; }
+  html.in-ho-so .pd-paper + .pd-paper { break-before: page; }
+  html.in-ho-so .bbp .empty { color: #000; }
 }

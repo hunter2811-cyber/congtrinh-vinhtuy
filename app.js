@@ -1748,7 +1748,7 @@
         '<div class="d-actions"><button type="button" class="btn primary big" data-inspect>' + ICON.cam + 'Chụp ảnh và kiểm tra</button>' +
           '<a class="btn big" href="' + dirUrl(p) + '" target="_blank" rel="noopener">' + ICON.dir + 'Chỉ đường</a>' +
           (p.phone ? '<a class="btn big" href="tel:' + esc(p.phone.split(/\s|\n/)[0].replace(/[^\d+]/g, '')) + '">Gọi chủ đầu tư</a>' : '<span></span>') + '</div>' +
-        '<div class="d-print"><button type="button" class="btn" data-cover>' + ICON.print + 'In bìa hồ sơ</button></div>' +
+        '<div class="d-print"><button type="button" class="btn" data-cover>' + ICON.print + 'In bìa hồ sơ</button><button type="button" class="btn" data-bbkt>' + ICON.print + 'In BBKT</button></div>' +
         '<div class="card"><div class="card-head"><h2>Hiện trạng</h2><button type="button" class="btn small status-edit" data-status>' + ICON.status + 'Cập nhật</button></div>' + (ph ? '<div class="st-row"><button type="button" class="st-thumb" aria-label="Xem ảnh gần nhất cỡ lớn"><span class="zoom" aria-hidden="true">' + ICON.expand + '</span></button><div>' : '') +
           '<div class="status-now">' + esc(p.status || '—') + '</div><div class="status-src">' + src + '</div>' +
           (ph ? '<div class="status-src">Ảnh gần nhất ' + esc(ph.at) + '. Bấm vào ảnh để xem lớn.</div></div></div>' : '') + '</div>' +
@@ -1775,6 +1775,7 @@
     el.querySelector('[data-inspect]').onclick = () => openInspect(p.id, { camera: true });
     el.querySelector('.status-edit').onclick = () => openStatus(p.id);
     el.querySelector('[data-cover]').onclick = () => openCover(p.id);
+    el.querySelector('[data-bbkt]').onclick = () => openCover(p.id, 'bbkt');
     if (ph) {
       const b = el.querySelector('.st-thumb');
       fillThumb(b, ph.id, 300, () => state.selected === p.id);
@@ -1816,33 +1817,114 @@
       '</div></div>';
   }
   function fitCover() {
-    const el = $('printDoc'), paper = el.querySelector('.pd-paper');
-    if (!paper || el.hidden) return;
-    const box = el.querySelector('.pd-scroll'), pw = paper.offsetWidth, ph = paper.offsetHeight;
-    const k = Math.min(1, (box.clientWidth - 32) / pw);
-    paper.style.transform = k < 1 ? 'scale(' + k + ')' : '';
-    paper.style.marginBottom = k < 1 ? (-(ph * (1 - k))) + 'px' : '';
-    paper.style.marginLeft = k < 1 ? '0' : '';
+    const el = $('printDoc');
+    if (el.hidden) return;
+    const box = el.querySelector('.pd-scroll');
+    el.querySelectorAll('.pd-paper').forEach(paper => {
+      const pw = paper.offsetWidth, ph = paper.offsetHeight, gap = paper.nextElementSibling ? 18 : 0;
+      const k = Math.min(1, (box.clientWidth - 32) / pw);
+      paper.style.transform = k < 1 ? 'scale(' + k + ')' : '';
+      paper.style.marginBottom = (k < 1 ? -(ph * (1 - k)) : 0) + gap + 'px';
+      paper.style.marginLeft = k < 1 ? '0' : '';
+    });
   }
-  function openCover(id) {
+
+  /* ---------- In biên bản kiểm tra (mẫu "BBKT phòng HTĐTNT lần 1", 2 trang A4) ----------
+     Trang 2 luôn bắt đầu bằng "Hiện trạng kiểm tra" (anh dặn): mỗi trang là một tờ A4 riêng. */
+  function bbktPages(p) {
+    const ed = 'contenteditable="true" spellcheck="false"';
+    const fld = v => '<span ' + ed + (v !== '' && v != null ? '>' + esc(String(v)) : ' class="empty">……') + '</span>';
+    // Lấy đúng cột Ông / cột Bà trong Data; tên công ty thì không thêm danh xưng
+    const pre = (t, n) => n ? (/^(công ty|cty)/i.test(n) ? n : t + ' ' + n) : '';
+    const cdt = p.ong != null || p.ba != null
+      ? [pre('Ông', p.ong), pre('Bà', p.ba)].filter(Boolean).join(' và ')
+      : String(p.owner || '').split(' – ').filter(Boolean).join(' và ');   // máy chủ chưa cập nhật .gs mới
+    const addr = String(p.address || '').trim();
+    const place = addr ? addr.replace(/[.,\s]+$/, '') + (/vĩnh tuy/i.test(addr) ? '' : ', phường Vĩnh Tuy') + ', TP Hà Nội.' : '';
+    const year = String(new Date().getFullYear());
+    const mem = (n, cv) => '<div class="bmem"><span class="bm1" ' + ed + '>' + n + '</span><span ' + ed + '>' + cv + '</span></div>';
+    const blank = n => '<div class="bmem"><span class="bm1 dotline" ' + ed + '>' + n + '. Ông (bà)</span><span class="dotline" ' + ed + '>Chức vụ:</span></div>';
+    const line = (label, full) => '<div class="bl' + (full ? ' full' : '') + '">' + (label ? '<span>' + label + '</span>' : '') + '<span class="fill" ' + ed + '></span></div>';
+    const cv = 'Chức vụ: Chuyên viên phòng HT-ĐT&amp;MT';
+    const p1 =
+      '<div class="bhd"><div><div>UBND PHƯỜNG VĨNH TUY</div><div class="b">PHÒNG HẠ TẦNG - ĐÔ THỊ VÀ MÔI TRƯỜNG</div><i class="rule" style="width:40%"></i></div>' +
+        '<div><div class="b">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div><div class="b big">Độc lập - Tự do - Hạnh phúc</div><i class="rule" style="width:60%"></i></div></div>' +
+      '<div class="bdate" ' + ed + '>Vĩnh Tuy, ngày&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; tháng&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; năm ' + year + '</div>' +
+      '<div class="btitle">BIÊN BẢN<br>Kiểm tra hoạt động xây dựng</div>' +
+      '<p ' + ed + '>Hôm nay, hồi…..giờ…….ngày……tháng……năm ' + year + '</p>' +
+      '<p ' + ed + '>Tổ kiểm tra do Ông: Vũ Huy Khiêm</p>' +
+      '<p ' + ed + '>Chức vụ: Phó Trưởng phòng Hạ tầng - Đô thị và Môi trường phường.</p>' +
+      '<p>Tại địa điểm: ' + fld(place) + '</p>' +
+      '<p class="b">I/ Thành phần đoàn kiểm tra:</p>' +
+      mem('1. Ông Đoàn Hoàng Dương', cv) + mem('2. Ông Nguyễn Bá Cường', cv) + mem('3. Ông Ngô Quốc Trung', cv) +
+      blank(4) + blank(5) + blank(6) +
+      '<p class="b">II/ Chủ đầu tư công trình xây dựng:</p>' +
+      '<p class="j">Chủ đầu tư: ' + fld(cdt) + '</p>' +
+      line('Người đại diện:') + line('Địa chỉ:') +
+      '<p class="b">III/ Nhà thầu xây dựng:</p>' +
+      line('Người đại diện:') + line('Địa chỉ:') +
+      '<p class="j">Sau khi xem xét hồ sơ và kiểm tra thực tế tại thực địa. Tổ kiểm tra tiến hành lập biên bản làm việc kiểm tra hoạt động xây dựng như sau:</p>' +
+      '<p class="j">Chủ đầu tư xây dựng công trình được cấp GPXD số: ' + fld(p.gpxd) + ' ngày ' + fld(p.gpxdDate) + ' do <span ' + ed + '>UBND phường Vĩnh Tuy</span> cấp.</p>' +
+      '<p class="j">Quy mô: ' + fld(p.scale) + '.</p>' +
+      '<p class="j">- Diện tích xây dựng tầng 1: ' + fld(fmtArea(p.dtxd)) + 'm<sup>2</sup></p>' +
+      '<p class="j">- Tổng diện tích sàn xây dựng mới: ' + fld(fmtArea(p.dts)) + 'm<sup>2</sup></p>' +
+      '<p class="j">- Chiều cao đến đỉnh mái: ' + fld(fmtArea(p.height)) + 'm</p>' +
+      '<div class="pno">1</div>';
+    const p2 =
+      line('Hiện trạng kiểm tra:') + line('', true) + line('', true) + line('', true) + line('', true) + line('', true) +
+      '<p class="j">Yêu cầu chủ đầu tư phải xây dựng theo đúng nội dung GPXD được phê duyệt. Trong quá trình thi công công trình phải đảm bảo an toàn lao động, vệ sinh môi trường và đảm bảo an toàn phòng cháy chữa cháy theo quy định. Nếu chủ đầu tư không thực hiện sẽ bị xử lý theo đúng quy định của pháp luật.</p>' +
+      '<p class="j">Giao các cán bộ, công chức được phân công quản lý trật tự xây dựng đô thị phường thường xuyên giám sát, kiểm tra, đôn đốc chủ đầu tư phải xây dựng công trình đúng theo GPXD được phê duyệt.</p>' +
+      '<p ' + ed + '>Biên bản kết thúc hồi……….cùng ngày và các thành viên thống nhất ký tên sau.</p>' +
+      '<div class="bsign"><div class="b">CHỦ ĐẦU TƯ XÂY DỰNG<br>CÔNG TRÌNH</div><div class="b">NGƯỜI LẬP BIÊN BẢN</div></div>' +
+      '<div class="bchair"><div class="b">CHỦ TRÌ TỔ KIỂM TRA</div><div class="b bname" ' + ed + '>Vũ Huy Khiêm</div></div>' +
+      '<div class="bmembers">CÁC THÀNH VIÊN TỔ KIỂM TRA:' +
+        [1, 2, 3, 4, 5].map(i => '<div class="bl"><span>' + i + '</span><span class="fill"></span></div>').join('') + '</div>' +
+      '<div class="pno">2</div>';
+    return [p1, p2];
+  }
+  /** Trang 1 luôn vừa một tờ: nội dung dài (địa chỉ, quy mô, 2 chủ đầu tư) thì thu khoảng cách giữa các đoạn, hết khoảng cách mới thu cỡ chữ. */
+  function fitBbkt() {
+    const p = $('printDoc').querySelector('.pd-paper.bbp');
+    if (!p || !p.getClientRects().length) return;
+    const t = p.style.transform; p.style.transform = 'none';
+    const fits = () => {
+      const kids = [...p.children].filter(e => !e.classList.contains('pno'));
+      return kids[kids.length - 1].getBoundingClientRect().bottom <= p.getBoundingClientRect().bottom - parseFloat(getComputedStyle(p).paddingBottom) + 0.5;
+    };
+    p.style.removeProperty('--bb-gap'); p.style.fontSize = ''; p.style.lineHeight = '';
+    for (let g = 3; g >= 0 && !fits(); g -= 0.25) p.style.setProperty('--bb-gap', g + 'pt');
+    for (let f = 13.5; f >= 12 && !fits(); f -= 0.5) { p.style.fontSize = f + 'pt'; p.style.lineHeight = (f + 4) + 'pt'; }
+    p.style.transform = t;
+  }
+  /** Mở bản xem trước để in: kind = 'cover' (bìa hồ sơ) hoặc 'bbkt' (biên bản kiểm tra). */
+  function openCover(id, kind) {
     const p = state.byId[id];
     if (!p) return;
+    const bb = kind === 'bbkt';
     const el = $('printDoc');
+    el.setAttribute('aria-label', bb ? 'In biên bản kiểm tra' : 'In bìa hồ sơ');
     el.innerHTML =
       '<div class="pd-bar"><button type="button" class="icon-btn" data-close aria-label="Đóng"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
-        '<span class="pd-title">Bìa hồ sơ · <span class="num">' + esc(p.id) + '</span></span>' +
+        '<span class="pd-title">' + (bb ? 'Biên bản kiểm tra' : 'Bìa hồ sơ') + ' · <span class="num">' + esc(p.id) + '</span></span>' +
         '<span class="hint">Bấm vào chữ để sửa trước khi in</span>' +
         '<button type="button" class="btn primary" data-print>' + ICON.print + 'In</button></div>' +
-      '<div class="pd-scroll"><div class="pd-paper">' + coverHtml(p) + '</div></div>';
+      '<div class="pd-scroll">' + (bb
+        ? bbktPages(p).map(h => '<div class="pd-paper bbp">' + h + '</div>').join('')
+        : '<div class="pd-paper">' + coverHtml(p) + '</div>') + '</div>';
     el.hidden = false;
     document.documentElement.classList.add('in-ho-so');
     el.querySelector('[data-close]').onclick = closeCover;
     el.querySelector('[data-print]').onclick = () => {
       const t = document.title;
-      document.title = 'Bia ho so ' + p.id;   // tên file PDF gợi ý
+      document.title = (bb ? 'BBKT ' : 'Bia ho so ') + p.id;   // tên file PDF gợi ý
       const go = () => { window.print(); setTimeout(() => { document.title = t; }, 1000); };
       document.fonts && document.fonts.ready ? document.fonts.ready.then(go) : go();
     };
+    if (bb) {
+      fitBbkt();
+      el.querySelector('.pd-paper').addEventListener('input', fitBbkt);
+      document.fonts && document.fonts.ready.then(fitBbkt);
+    }
     fitCover();
     back.sync();
   }
