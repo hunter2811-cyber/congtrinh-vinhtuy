@@ -1241,7 +1241,7 @@
     call('apiSaveInspection', { id: p.id, status, note: '', lat: null, lng: null, acc: null, updateLocation: false, photoIds: [] })
       .then(res => {
         p.last = Object.assign({}, p.last || {}, { t: Date.now(), at: res.at, by: state.user.name, status, count: (p.last ? p.last.count : 0) + 1 });
-        p.status = status; p.group = groupOf(status, p);
+        p.status = status; p.statusFrom = 'app'; p.group = groupOf(status, p);
         stFor.busy = false; closeStatus();
         refresh(); updateNear();
         if (isOpen($('detail')) && state.selected === p.id) openDetail(p.id);
@@ -1490,6 +1490,17 @@
     }).join('') + '</div>';
   }
 
+  /** Nguồn của hiện trạng đang hiện: lần ghi trong app, hoặc lần anh sửa file dữ liệu (bên nào mới hơn thì hiện). */
+  function statusSource(p, long) {
+    if (p.statusFrom !== 'sheet' && p.last && p.last.status) {
+      return long
+        ? 'Cập nhật tại hiện trường ' + esc(p.last.at) + ' bởi ' + esc(p.last.by) + (p.sheetStatus && p.sheetStatus !== p.last.status ? ' · trong file: ' + esc(p.sheetStatus) : '')
+        : esc(p.last.by) + ' · <span class="num">' + esc(p.last.at) + '</span>';
+    }
+    if (p.sheetAt) return (long ? 'Cập nhật trong file dữ liệu lúc ' : 'File dữ liệu · ') + '<span class="num">' + esc(p.sheetAt) + '</span>';
+    return 'Theo file dữ liệu';
+  }
+
   function kv(label, value) {
     return value === '' || value == null ? '' : '<dt>' + label + '</dt><dd>' + value + '</dd>';
   }
@@ -1498,9 +1509,7 @@
     const p = state.byId[id]; if (!p) return;
     const admin = state.user && state.user.role === 'admin';
     const el = $('detail');
-    const src = p.last && p.last.status
-      ? 'Cập nhật tại hiện trường ' + esc(p.last.at) + ' bởi ' + esc(p.last.by) + (p.sheetStatus && p.sheetStatus !== p.last.status ? ' · trên sheet: ' + esc(p.sheetStatus) : '')
-      : 'Theo file dữ liệu';
+    const src = statusSource(p, true);
     const ph = p.last && p.last.photo;
     const loc = p.loc
       ? '<div class="gps-coord num">' + fmtCoord(p.loc.lat) + ', ' + fmtCoord(p.loc.lng) + '</div>' +
@@ -1638,7 +1647,7 @@
         '<div class="mpop-addr">' + esc(p.address) + '</div>' +
         '<div class="d-tags">' + (p.area ? '<span class="pill">Khu ' + p.area + '</span>' : '') + '<span class="pill num">' + esc(p.id) + '</span></div>' +
         '<div class="mpop-st"><span class="mpop-l">Hiện trạng</span><b>' + dot(p.group) + esc(p.status || GROUP[p.group].label) + '</b>' +
-          '<span class="mpop-l">' + (p.last && p.last.status ? esc(p.last.by) + ' · <span class="num">' + esc(p.last.at) + '</span>' : 'Theo file dữ liệu') + '</span></div>' +
+          '<span class="mpop-l">' + statusSource(p, false) + '</span></div>' +
         '<dl class="mpop-kv">' +
           row('Biên bản', checks.length ? '<span class="num">' + esc(checks[checks.length - 1]) + '</span>' : 'Chưa kiểm tra') +
           row('Số GPXD', esc(p.gpxd) + (p.gpxdDate ? ' <span class="num">' + esc(p.gpxdDate) + '</span>' : '')) +
@@ -1860,7 +1869,7 @@
       // Cập nhật ngay trên máy, không cần tải lại toàn bộ
       p.last = { t: Date.now(), at: res.at, by: state.user.name, status, note, photos: ids.length, count: (p.last ? p.last.count : 0) + 1,
         photo: ids.length ? { id: ids[ids.length - 1], n: ids.length, t: Date.now(), at: res.at } : (p.last && p.last.photo) || null };
-      if (status) { p.status = status; p.group = groupOf(status, p); }
+      if (status) { p.status = status; p.statusFrom = 'app'; p.group = groupOf(status, p); }
       if (move && insp.pos) p.loc = { lat: insp.pos.lat, lng: insp.pos.lng, acc: Math.round(insp.pos.acc), source: 'GPS hiện trường', by: state.user.name, at: res.at };
       insp.busy = false;
       closeInspect();
