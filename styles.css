@@ -481,7 +481,10 @@ textarea.input { min-height: 88px; resize: vertical; }
 .bottombar { display: none; }
 /* Máy tính chỉ để xem: ẩn gọi, chỉ đường, chụp ảnh */
 @media (min-width: 900px) {
-  .row-acts, .d-actions, .status-edit { display: none !important; }
+  .row-acts, .d-actions { display: none !important; }
+  /* Bảng cập nhật hiện trạng / hỏi xóa vị trí: hộp nổi giữa màn hình */
+  .stsheet { top: 0; bottom: 0; margin: auto; height: fit-content; max-width: 560px; padding: 20px 24px; border-radius: var(--radius-card); border: 1px solid var(--border); box-shadow: var(--shadow); transform: translateY(12px) scale(.98); }
+  .stsheet .grab { display: none; }
 }
 
 /* Điện thoại */
@@ -562,7 +565,10 @@ textarea.input { min-height: 88px; resize: vertical; }
 .mpop-owner { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mpop-addr { color: var(--muted); font-size: 13px; margin-top: -7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mpop .d-tags { margin-top: 0; flex-wrap: nowrap; overflow: hidden; }
-.mpop-st { padding: 8px 12px; border-radius: 14px; background: var(--raised); display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mpop-st { padding: 6px 8px 8px 12px; border-radius: 14px; background: var(--raised); display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mpop-sthead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mpop-upd { flex: none; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--control); background: transparent; color: var(--text); font: 500 12px var(--font); cursor: pointer; }
+.mpop-upd:hover { border-color: var(--text); }
 .mpop-st b { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mpop-st b .dot { display: inline-block; margin: 0 7px 1px 0; vertical-align: middle; }
 .mpop-l { color: var(--faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -708,3 +714,32 @@ textarea.input { min-height: 88px; resize: vertical; }
   html.in-ho-so .pd-paper + .pd-paper { break-before: page; }
   html.in-ho-so .bbp .empty { color: #000; }
 }
+/* Sửa / xóa vị trí công trình (quản trị, máy tính) */
+.btn.sm { height: 30px; padding: 0 12px; font-size: 12px; }
+.btn.danger { color: var(--negative); border-color: color-mix(in srgb, var(--negative) 45%, transparent); }
+.btn.danger-fill { background: var(--negative); border-color: var(--negative); color: #fff; }
+.loc-acts { display: flex; gap: 6px; }
+@media (max-width: 899px) { .loc-acts { display: none; } }
+.cf-body { margin: 4px 0 0; color: var(--muted); line-height: 21px; }
+.cf-body b { color: var(--text); font-weight: 500; }
+.cf-hint { margin: 0; color: var(--faint); font-size: 12px; line-height: 18px; }
+.cf-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.locedit { position: absolute; z-index: 700; left: 14px; right: 14px; top: 14px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.locedit > * { pointer-events: auto; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+.le-head { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 1px solid #f2b33d; }
+.le-head svg { flex: none; }
+.le-head div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.le-head b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.le-head span { color: var(--faint); font-size: 12px; }
+.le-bar { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border); }
+.le-input { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 14px; border-radius: 999px; background: var(--ground); border: 1px solid var(--control); }
+.le-input:focus-within { border-color: var(--text); }
+.le-input span { color: var(--faint); font-size: 12px; flex: none; }
+.le-input input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px; outline: none; }
+.le-input input.bad { color: var(--negative); }
+.mapwrap.loc-editing .map-tools, .mapwrap.loc-editing .legend { display: none; }
+.mapwrap.loc-editing .leaflet-overlay-pane path.leaflet-interactive { pointer-events: none !important; }   /* bấm xuyên qua marker khác để đặt vị trí */
+.mapwrap.loc-editing .leaflet-container { cursor: crosshair; }
+.pin-edit { background: none; border: 0; }
+.pin-edit svg { display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); cursor: grab; }
+.pin-edit span { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); padding: 3px 9px; border-radius: 8px; background: var(--primary); color: var(--on-primary); font-size: 11px; font-weight: 500; white-space: nowrap; pointer-events: none; }
