@@ -29,6 +29,7 @@
   const app = $('app');
   const isPhone = () => window.matchMedia('(max-width: 899px)').matches;
   const calm = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches || !window.gsap;
+  const PIN_SVG = '<svg viewBox="0 0 24 31" width="34" height="44" aria-hidden="true"><path d="M12 1C6 1 1.5 5.6 1.5 11.3 1.5 19 12 30 12 30s10.5-11 10.5-18.7C22.5 5.6 18 1 12 1z" fill="#f2b33d" stroke="#ffffff" stroke-width="1.6"/><circle cx="12" cy="11.5" r="4" fill="#0c0d0f"/></svg>';
   const ICON = {
     status: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 4.5H7A1.5 1.5 0 0 0 5.5 6v13A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V6A1.5 1.5 0 0 0 17 4.5h-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><rect x="9" y="3" width="6" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 13l2 2 4-4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     call: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6.6 3.8h2.6l1.4 3.7-1.9 1.3a10.6 10.6 0 0 0 4.5 4.5l1.3-1.9 3.7 1.4v2.6a2 2 0 0 1-2.1 2A14.4 14.4 0 0 1 4.6 5.9a2 2 0 0 1 2-2.1z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
@@ -169,6 +170,7 @@
       if (!$('viewer').hidden) return closeViewer;
       if (!$('printDoc').hidden) return closeCover;
       if (isOpen($('stSheet'))) return closeStatus;
+      if (locEd) return closeLocEdit;
       if (isOpen($('near'))) return closeNear;
       if (isOpen($('inspect'))) return closeInspect;
       if (isOpen($('detail'))) return closeDetail;
@@ -755,6 +757,23 @@
       },
       canPop: true,
       point(loc) { return this.m.latLngToContainerPoint([loc.lat, loc.lng]); },
+      center() { const c = this.m.getCenter(); return { lat: c.lat, lng: c.lng }; },
+      /** Sửa vị trí (máy tính): ghim kéo được, bấm vào bản đồ để đặt; vòng nét đứt ở vị trí cũ. onMove({lat, lng}) báo vị trí mới. */
+      editStart(start, old, onMove) {
+        this.editStop();
+        const icon = L.divIcon({ className: 'pin-edit', html: PIN_SVG + '<span>Kéo để chỉnh</span>', iconSize: [34, 44], iconAnchor: [17, 42] });
+        this.pin = L.marker([start.lat, start.lng], { draggable: true, icon, zIndexOffset: 1000, keyboard: false, autoPan: true }).addTo(this.m);
+        this.pin.on('drag', e => onMove(e.target.getLatLng()));
+        if (old) this.ghost = L.circleMarker([old.lat, old.lng], { radius: 9, color: '#f2b33d', weight: 2, dashArray: '3 3', fill: false, interactive: false }).addTo(this.m);
+        this._editClick = e => { this.pin.setLatLng(e.latlng); onMove(e.latlng); };
+        this.m.on('click', this._editClick);
+      },
+      editMove(lat, lng) { if (this.pin) this.pin.setLatLng([lat, lng]); },
+      editStop() {
+        if (this.pin) { this.pin.remove(); this.pin = null; }
+        if (this.ghost) { this.ghost.remove(); this.ghost = null; }
+        if (this._editClick) { this.m.off('click', this._editClick); this._editClick = null; }
+      },
       keepAbove(loc, pad) {
         const pt = this.m.latLngToContainerPoint([loc.lat, loc.lng]);
         const limit = this.m.getSize().y - pad - 24;
@@ -1247,6 +1266,7 @@
         stFor.busy = false; closeStatus();
         refresh(); updateNear();
         if (isOpen($('detail')) && state.selected === p.id) openDetail(p.id);
+        if (!$('mpop').hidden && $('mpop').dataset.id === p.id) showPop(p);
         toast('Đã cập nhật: ' + status, 3000, true);
       })
       .catch(err => {
@@ -1739,7 +1759,11 @@
     const loc = p.loc
       ? '<div class="gps-coord num">' + fmtCoord(p.loc.lat) + ', ' + fmtCoord(p.loc.lng) + '</div>' +
         '<div class="hint">' + esc(p.loc.source) + (p.loc.acc ? ' · sai số ±' + p.loc.acc + ' m' : '') + (p.loc.at ? ' · ' + esc(p.loc.at) : '') + (p.loc.by && p.loc.by !== 'Hệ thống' ? ' · ' + esc(p.loc.by) : '') + '</div>'
-      : '<div>Chưa có vị trí.</div><div class="hint">Đến công trình rồi bấm Kiểm tra hiện trường để lấy vị trí GPS.</div>';
+      : '<div>Chưa có vị trí.</div><div class="hint">' + (p.locDeleted ? 'Đã xóa vị trí lúc ' + esc(p.locDeleted.at) + (p.locDeleted.by ? ' bởi ' + esc(p.locDeleted.by) : '') + '. ' : '') + 'Đến công trình rồi bấm Kiểm tra hiện trường để lấy vị trí GPS.</div>';
+    // Sửa / xóa vị trí: chỉ quản trị, chỉ trên máy tính (bản đồ nằm cạnh hồ sơ)
+    const locActs = admin && state.engine && state.engine.editStart
+      ? '<div class="loc-acts"><button type="button" class="btn sm" data-locedit>' + (p.loc ? 'Sửa vị trí' : 'Đặt vị trí') + '</button>' +
+        (p.loc ? '<button type="button" class="btn sm danger" data-locdel>Xóa vị trí</button>' : '') + '</div>' : '';
     el.innerHTML =
       '<div class="sheet-head"><button type="button" class="icon-btn" data-close aria-label="Đóng hồ sơ"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
       '<span class="crumb">Hồ sơ công trình · <span class="num">' + esc(p.id) + '</span></span></div>' +
@@ -1754,6 +1778,7 @@
         '<div class="card"><div class="card-head"><h2>Hiện trạng</h2><button type="button" class="btn small status-edit" data-status>' + ICON.status + 'Cập nhật</button></div>' + (ph ? '<div class="st-row"><button type="button" class="st-thumb" aria-label="Xem ảnh gần nhất cỡ lớn"><span class="zoom" aria-hidden="true">' + ICON.expand + '</span></button><div>' : '') +
           '<div class="status-now">' + esc(p.status || '—') + '</div><div class="status-src">' + src + '</div>' +
           (ph ? '<div class="status-src">Ảnh gần nhất ' + esc(ph.at) + '. Bấm vào ảnh để xem lớn.</div></div></div>' : '') + '</div>' +
+        '<div class="card"><div class="card-head"><h2>Vị trí</h2>' + locActs + '</div>' + loc + '</div>' +
         '<div class="card"><h2>Biên bản kiểm tra</h2>' + ladder(p) + '</div>' +
         '<div class="card"><h2>Giấy phép và quy mô</h2><dl class="kv">' +
           kv('Số GPXD', esc(p.gpxd) + (p.gpxdDate ? ' ngày ' + esc(p.gpxdDate) : '')) +
@@ -1768,7 +1793,6 @@
           (admin ? kv('Thường trú', esc(p.ownerAddress)) : '') +
           kv('Ghi chú', esc(p.note)) +
         '</dl></div>' +
-        '<div class="card"><h2>Vị trí</h2>' + loc + '</div>' +
         '<div class="card"><h2>Lịch sử kiểm tra hiện trường</h2><div id="histBox"><div class="hint">Đang tải…</div></div></div>' +
       '</div>';
     if (!isOpen(el)) openPanel(el);
@@ -1778,6 +1802,9 @@
     el.querySelector('.status-edit').onclick = () => openStatus(p.id);
     el.querySelector('[data-cover]').onclick = () => openCover(p.id);
     el.querySelector('[data-bbkt]').onclick = () => openCover(p.id, 'bbkt');
+    const le = el.querySelector('[data-locedit]'), ld = el.querySelector('[data-locdel]');
+    if (le) le.onclick = () => openLocEdit(p.id);
+    if (ld) ld.onclick = () => askDeleteLoc(p.id);
     if (ph) {
       const b = el.querySelector('.st-thumb');
       fillThumb(b, ph.id, 300, () => state.selected === p.id);
@@ -1785,7 +1812,116 @@
     }
     loadHistory(p.id);
   }
-  function closeDetail() { closePanel($('detail')); }
+  function closeDetail() { closeLocEdit(); closePanel($('detail')); }
+
+  /* ---------- Sửa / xóa vị trí công trình (quản trị, máy tính) ---------- */
+  let locEd = null;
+  /** Đọc tọa độ dán vào: "21.008382, 105.864627" (Google Maps), "21,008382 105,864627"; nhập ngược thì tự đổi lại. */
+  function parseCoord(text) {
+    const n = (String(text).match(/-?\d+(?:[.,]\d+)?/g) || []).map(x => Number(x.replace(',', '.')));
+    if (n.length !== 2) return null;
+    let [lat, lng] = n;
+    if (lat > 100 && lng < 30) [lat, lng] = [lng, lat];
+    return lat >= 20.5 && lat <= 21.5 && lng >= 105.3 && lng <= 106.3 ? { lat, lng } : null;
+  }
+  function openLocEdit(id) {
+    const p = state.byId[id];
+    if (!p || !state.engine || !state.engine.editStart) return;
+    hidePop();
+    const old = p.loc ? { lat: p.loc.lat, lng: p.loc.lng } : null;
+    const start = old || state.engine.center();
+    locEd = { id, old, lat: start.lat, lng: start.lng, busy: false };
+    const el = $('locEdit');
+    el.innerHTML =
+      '<div class="le-head">' + PIN_SVG.replace('width="34" height="44"', 'width="16" height="21"') +
+        '<div><b>Sửa vị trí · ' + esc(p.owner || '—') + ' · <span class="num">' + esc(p.id) + '</span></b>' +
+        '<span>Kéo marker hoặc bấm vào bản đồ để đặt vị trí mới. Có thể dán tọa độ copy từ Google Maps.</span></div></div>' +
+      '<div class="le-bar"><label class="le-input"><span>Tọa độ</span><input id="leCoord" class="num" aria-label="Tọa độ mới" autocomplete="off" spellcheck="false"><span id="leDist" class="num"></span></label>' +
+        '<button type="button" class="btn" id="leCancel">Hủy</button><button type="button" class="btn primary" id="leSave">Lưu vị trí</button></div>';
+    el.hidden = false;
+    $('panelMap').classList.add('loc-editing');
+    state.engine.editStart(start, old, ll => setLocEd(ll.lat, ll.lng, true));
+    state.engine.focus(start.lat, start.lng, 18);
+    setLocEd(start.lat, start.lng, true);
+    $('leCoord').oninput = e => {
+      const c = parseCoord(e.target.value);
+      e.target.classList.toggle('bad', !c && e.target.value.trim() !== '');
+      if (c) { setLocEd(c.lat, c.lng, false); state.engine.editMove(c.lat, c.lng); state.engine.focus(c.lat, c.lng); }
+      else $('leSave').disabled = true;
+    };
+    $('leCoord').onkeydown = e => { if (e.key === 'Enter' && !$('leSave').disabled) saveLocEdit(); };
+    $('leCancel').onclick = closeLocEdit;
+    $('leSave').onclick = saveLocEdit;
+    back.sync();
+  }
+  function setLocEd(lat, lng, fromMap) {
+    if (!locEd) return;
+    locEd.lat = lat; locEd.lng = lng;
+    if (fromMap) { $('leCoord').value = fmtCoord(lat) + ', ' + fmtCoord(lng); $('leCoord').classList.remove('bad'); }
+    const d = locEd.old ? meters(locEd.old, { lat, lng }) : null;
+    $('leDist').textContent = d == null ? 'chưa có vị trí cũ' : 'cách vị trí cũ ' + fmtDist(d);
+    $('leSave').disabled = locEd.busy || (d != null && d < 0.5);
+  }
+  function closeLocEdit() {
+    if (!locEd || locEd.busy) return;
+    locEd = null;
+    if (state.engine && state.engine.editStop) state.engine.editStop();
+    $('locEdit').hidden = true; $('locEdit').innerHTML = '';
+    $('panelMap').classList.remove('loc-editing');
+    back.sync();
+  }
+  function saveLocEdit() {
+    if (!locEd || locEd.busy) return;
+    const p = state.byId[locEd.id], btn = $('leSave');
+    locEd.busy = true; btn.disabled = true; btn.textContent = 'Đang lưu…';
+    call('apiSetLocation', { id: p.id, lat: locEd.lat, lng: locEd.lng })
+      .then(res => {
+        p.loc = { lat: res.lat, lng: res.lng, acc: null, source: 'Đặt tay trên máy tính', by: state.user.name, at: res.at };
+        p.locDeleted = null;
+        locEd.busy = false; closeLocEdit();
+        refresh();
+        if (isOpen($('detail'))) openDetail(p.id);
+        toast('Đã lưu vị trí mới', 3000, true);
+      })
+      .catch(err => {
+        if (!locEd) return;
+        locEd.busy = false; btn.disabled = false; btn.textContent = 'Thử lại';
+        toast('Chưa lưu được: ' + (err && err.message || err), 5000);
+      });
+  }
+  /** Hỏi lại trước khi xóa vị trí (dùng chung bảng nổi với cập nhật hiện trạng). */
+  function askDeleteLoc(id) {
+    const p = state.byId[id]; if (!p) return;
+    closeLocEdit();
+    stFor = { busy: false };
+    const el = $('stSheet');
+    el.innerHTML = '<span class="grab" aria-hidden="true"></span>' +
+      '<div class="st-head"><div><b id="stTitle">Xóa vị trí công trình?</b><span>' + esc(p.id + ' · ' + p.owner + ' · ' + p.address) + '</span></div>' +
+      '<button type="button" class="icon-btn" data-close aria-label="Đóng">' + ICON.close + '</button></div>' +
+      '<p class="cf-body">Marker biến khỏi bản đồ, công trình chuyển sang nhóm <b>Chưa có vị trí</b>.</p>' +
+      '<p class="cf-hint">Hồ sơ, ảnh và lịch sử kiểm tra vẫn giữ nguyên. Tọa độ đang có trong file dữ liệu (nếu có) cũng bị bỏ qua, trừ khi sau này anh nhập số khác vào file. Lần sau cán bộ chụp ảnh tại công trình và chọn cập nhật vị trí thì vị trí GPS mới được ghi lại.</p>' +
+      '<div class="cf-acts"><button type="button" class="btn" data-close>Hủy</button><button type="button" class="btn danger-fill" id="cfOk">Xóa vị trí</button></div>';
+    $('scrim').hidden = false; openPanel(el);
+    el.querySelectorAll('[data-close]').forEach(b => b.onclick = closeStatus);
+    const ok = $('cfOk');
+    ok.onclick = () => {
+      if (stFor.busy) return;
+      stFor.busy = true; ok.disabled = true; ok.textContent = 'Đang xóa…';
+      call('apiDeleteLocation', { id: p.id })
+        .then(res => {
+          p.loc = null; p.locDeleted = { by: state.user.name, at: res.at };
+          stFor.busy = false; closeStatus();
+          if ($('mpop').dataset.id === p.id) hidePop();
+          refresh();
+          if (isOpen($('detail'))) openDetail(p.id);
+          toast('Đã xóa vị trí. Công trình chuyển sang Chưa có vị trí.', 3500, true);
+        })
+        .catch(err => {
+          stFor.busy = false; ok.disabled = false; ok.textContent = 'Thử lại';
+          toast('Chưa xóa được: ' + (err && err.message || err), 5000);
+        });
+    };
+  }
 
   /* ---------- In bìa hồ sơ (mẫu "Bìa hồ sơ 2026", trước là trộn thư Word) ----------
      Tự điền từ dữ liệu công trình; bấm vào chữ để sửa tay trước khi in, chỉ sửa trên bản in. */
@@ -2033,7 +2169,7 @@
         '<div class="mpop-owner" id="mpopTitle">' + esc(p.owner || '—') + '</div>' +
         '<div class="mpop-addr">' + esc(p.address) + '</div>' +
         '<div class="d-tags">' + (p.area ? '<span class="pill">Khu ' + p.area + '</span>' : '') + '<span class="pill num">' + esc(p.id) + '</span></div>' +
-        '<div class="mpop-st"><span class="mpop-l">Hiện trạng</span><b>' + dot(p.group) + esc(p.status || GROUP[p.group].label) + '</b>' +
+        '<div class="mpop-st"><div class="mpop-sthead"><span class="mpop-l">Hiện trạng</span><button type="button" class="mpop-upd">Cập nhật</button></div><b>' + dot(p.group) + esc(p.status || GROUP[p.group].label) + '</b>' +
           '<span class="mpop-l">' + statusSource(p, false) + '</span></div>' +
         '<dl class="mpop-kv">' +
           row('Biên bản', checks.length ? '<span class="num">' + esc(checks[checks.length - 1]) + '</span>' : 'Chưa kiểm tra') +
@@ -2052,6 +2188,7 @@
     placePop();
     if (!calm()) gsap.fromTo(el, { autoAlpha: 0, x: -8 }, { autoAlpha: 1, x: 0, duration: 0.28, ease: 'expo.out', clearProps: 'transform,opacity,visibility' });
     el.querySelector('.mpop-x').onclick = hidePop;
+    el.querySelector('.mpop-upd').onclick = () => openStatus(p.id);
     el.querySelector('.mpop-more').onclick = () => { hidePop(); openDetail(p.id); };
     if (!ph) return;
     const box = el.querySelector('.mpop-photo');
@@ -2301,8 +2438,9 @@
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (!$('viewer').hidden) { closeViewer(); return; }
-    if (!$('mpop').hidden) { hidePop(); return; }
     if (isOpen($('stSheet'))) { closeStatus(); return; }
+    if (locEd) { closeLocEdit(); return; }
+    if (!$('mpop').hidden) { hidePop(); return; }
     if (isOpen($('near'))) { closeNear(); return; }
     if (isOpen($('inspect'))) { closeInspect(); return; }
     if (isOpen($('detail'))) closeDetail();
