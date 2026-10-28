@@ -633,12 +633,11 @@ textarea.input { min-height: 88px; resize: vertical; }
   .app[data-page="report"] .reportpage { display: none; }
 }
 /* In báo cáo: chỉ áp dụng khi bấm nút In (html có class in-bao-cao), không ảnh hưởng các bản in khác */
-@page baocao { size: A4 landscape; margin: 12mm 10mm; }
 @media print {
   html.in-bao-cao, html.in-bao-cao body { height: auto !important; background: #fff !important; }
-  html.in-bao-cao body > *:not(.app), html.in-bao-cao .app > *:not(.reportpage), html.in-bao-cao .rp-side, html.in-bao-cao .rp-bar, html.in-bao-cao .rp-noarea { display: none !important; }
+  html.in-bao-cao > *:not(body), html.in-bao-cao body > *:not(.app), html.in-bao-cao .app > *:not(.reportpage), html.in-bao-cao .rp-side, html.in-bao-cao .rp-bar, html.in-bao-cao .rp-noarea { display: none !important; }
   html.in-bao-cao .app, html.in-bao-cao .reportpage, html.in-bao-cao .rp-main, html.in-bao-cao .rp-scroll { display: block !important; height: auto !important; overflow: visible !important; padding: 0 !important; background: #fff !important; border: 0 !important; }
-  html.in-bao-cao .rp-paper { page: baocao; width: auto; padding: 0; box-shadow: none !important; background: #fff; color: #000; font-size: 12pt; }
+  html.in-bao-cao .rp-paper { width: auto; padding: 0; box-shadow: none !important; background: #fff; color: #000; font-size: 12pt; }
   html.in-bao-cao .rp-table { font-size: 11pt; }
 }
 /* In bìa hồ sơ (theo mẫu "Bìa hồ sơ 2026"): lớp xem trước khổ A4, sửa tay trước khi in */
@@ -698,12 +697,12 @@ textarea.input { min-height: 88px; resize: vertical; }
 .bbp .bmembers .bl { padding: 0; }
 .bbp .pno { position: absolute; right: 15mm; bottom: 8mm; font-size: 11pt; }
 .bbp .empty { color: #9a9a9a; }
-@page biahs { size: A4 portrait; margin: 0; }
+/* Khổ giấy in đặt bằng thẻ <style id="printPage"> lúc in (App.html printPage): trang tên (page: …) làm Chrome in thừa 1 trang trắng đầu */
 @media print {
   html.in-ho-so, html.in-ho-so body { height: auto !important; background: #fff !important; overflow: visible !important; }
-  html.in-ho-so body > *:not(.app), html.in-ho-so .app > *:not(.printdoc), html.in-ho-so .pd-bar { display: none !important; }
+  html.in-ho-so > *:not(body), html.in-ho-so body > *:not(.app), html.in-ho-so .app > *:not(.printdoc), html.in-ho-so .pd-bar { display: none !important; }
   html.in-ho-so .app, html.in-ho-so .printdoc, html.in-ho-so .pd-scroll { position: static !important; display: block !important; height: auto !important; overflow: visible !important; padding: 0 !important; background: #fff !important; border: 0 !important; }
-  html.in-ho-so .pd-paper { page: biahs; margin: 0 !important; box-shadow: none !important; transform: none !important; height: 296mm; overflow: hidden; }
+  html.in-ho-so .pd-paper { margin: 0 !important; box-shadow: none !important; transform: none !important; height: 296mm; overflow: hidden; }
   html.in-ho-so .pd-paper [contenteditable] { background: none !important; }
   html.in-ho-so .cv-lines .empty { color: #000; }
   html.in-ho-so .pd-paper + .pd-paper { break-before: page; }
