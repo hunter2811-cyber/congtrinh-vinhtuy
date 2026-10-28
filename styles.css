@@ -641,3 +641,41 @@ textarea.input { min-height: 88px; resize: vertical; }
   html.in-bao-cao .rp-paper { page: baocao; width: auto; padding: 0; box-shadow: none !important; background: #fff; color: #000; font-size: 12pt; }
   html.in-bao-cao .rp-table { font-size: 11pt; }
 }
+/* In bìa hồ sơ (theo mẫu "Bìa hồ sơ 2026"): lớp xem trước khổ A4, sửa tay trước khi in */
+.d-print { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.printdoc { position: fixed; inset: 0; z-index: 1900; display: flex; flex-direction: column; background: var(--ground); }
+.pd-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; padding-top: calc(10px + env(safe-area-inset-top)); border-bottom: 1px solid var(--border); background: var(--surface); }
+.pd-bar .pd-title { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pd-bar .hint { white-space: nowrap; }
+@media (max-width: 599px) { .pd-bar .hint { display: none; } }
+.pd-scroll { flex: 1; overflow: auto; padding: 20px 16px 40px; -webkit-overflow-scrolling: touch; }
+.pd-paper { width: 210mm; height: 297mm; margin: 0 auto; box-sizing: border-box; padding: 10mm; background: #fff; color: #000; font-family: "Times New Roman", Tinos, serif; box-shadow: 0 10px 40px rgba(0,0,0,.35); transform-origin: top left; }
+.pd-paper [contenteditable] { outline: none; border-radius: 2px; }
+.pd-paper [contenteditable]:hover { background: #fff7d6; }
+.pd-paper [contenteditable]:focus { background: #fff1b0; }
+.cv-frame { position: relative; height: 100%; box-sizing: border-box; border: 6px double #000; padding: 6mm 10mm; }
+.cv-top { display: grid; grid-template-columns: 25% 46% 29%; align-items: center; margin-top: 4mm; }
+.cv-kv { font-size: 26pt; font-weight: 700; text-align: left; align-self: start; margin: -8mm 0 0 -6mm; }
+.cv-year { font-family: "Abril Fatface", Elephant, serif; font-weight: 400; font-variant-numeric: lining-nums; font-size: 32pt; text-align: center; letter-spacing: .02em; text-decoration: underline; text-decoration-thickness: 2.5px; text-underline-offset: 6px; }
+.cv-no { position: absolute; top: 5mm; right: 5mm; width: 25mm; height: 25mm; box-sizing: border-box; border: 1.3px solid #000; border-radius: 50% !important; display: flex; align-items: center; justify-content: center; font-size: 35pt; font-weight: 700; line-height: 1; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; }
+.cv-no.long { font-size: 30pt; }
+.cv-title { text-align: center; font-family: "Playfair Display", "Bodoni MT", serif; font-weight: 900; font-variant-numeric: lining-nums; font-size: 40pt; letter-spacing: .02em; margin: 26mm 0 22mm; }
+.cv-lines { margin-left: 22mm; margin-right: 8mm; font-size: 21pt; line-height: 1.5; }
+.cv-lines p, .cv-row { margin: 0 0 15pt; }
+.cv-lines b { font-weight: 700; }
+.cv-lines sup { font-size: .6em; line-height: 0; vertical-align: .7em; }
+.cv-row { display: flex; }
+.cv-row > span { white-space: nowrap; }
+.cv-owners { margin-left: .25em; }
+.cv-owners span { display: block; }
+.cv-owners span + span { margin-top: 8pt; }
+.cv-lines .empty { color: #9a9a9a; font-weight: 400; }
+@page biahs { size: A4 portrait; margin: 0; }
+@media print {
+  html.in-ho-so, html.in-ho-so body { height: auto !important; background: #fff !important; overflow: visible !important; }
+  html.in-ho-so body > *:not(.app), html.in-ho-so .app > *:not(.printdoc), html.in-ho-so .pd-bar { display: none !important; }
+  html.in-ho-so .app, html.in-ho-so .printdoc, html.in-ho-so .pd-scroll { position: static !important; display: block !important; height: auto !important; overflow: visible !important; padding: 0 !important; background: #fff !important; border: 0 !important; }
+  html.in-ho-so .pd-paper { page: biahs; margin: 0 !important; box-shadow: none !important; transform: none !important; height: 296mm; overflow: hidden; }
+  html.in-ho-so .pd-paper [contenteditable] { background: none !important; }
+  html.in-ho-so .cv-lines .empty { color: #000; }
+}
