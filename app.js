@@ -1592,7 +1592,9 @@
     const t = document.title;
     document.title = 'Bao cao tuan ' + dmy(rp.from).replace(/\//g, '-') + ' den ' + dmy(rp.to).replace(/\//g, '-');   // tên file PDF gợi ý
     document.documentElement.classList.add('in-bao-cao');
+    printPage('size: A4 landscape; margin: 12mm 10mm;');
     window.print();
+    printPage('');
     document.documentElement.classList.remove('in-bao-cao');
     document.title = t;
   };
@@ -1896,6 +1898,12 @@
     for (let f = 13.5; f >= 12 && !fits(); f -= 0.5) { p.style.fontSize = f + 'pt'; p.style.lineHeight = (f + 4) + 'pt'; }
     p.style.transform = t;
   }
+  /** Khổ giấy cho bản in đang mở ('' = bỏ). Không dùng trang tên @page x { } vì Chrome in thừa 1 trang trắng đầu. */
+  function printPage(css) {
+    let el = document.getElementById('printPage');
+    if (!el) { el = document.createElement('style'); el.id = 'printPage'; document.head.appendChild(el); }
+    el.textContent = css ? '@page { ' + css + ' }' : '';
+  }
   /** Mở bản xem trước để in: kind = 'cover' (bìa hồ sơ) hoặc 'bbkt' (biên bản kiểm tra). */
   function openCover(id, kind) {
     const p = state.byId[id];
@@ -1913,6 +1921,7 @@
         : '<div class="pd-paper">' + coverHtml(p) + '</div>') + '</div>';
     el.hidden = false;
     document.documentElement.classList.add('in-ho-so');
+    printPage('size: A4 portrait; margin: 0;');
     el.querySelector('[data-close]').onclick = closeCover;
     el.querySelector('[data-print]').onclick = () => {
       const t = document.title;
@@ -1932,6 +1941,7 @@
     const el = $('printDoc');
     el.hidden = true; el.innerHTML = '';
     document.documentElement.classList.remove('in-ho-so');
+    printPage('');
     back.sync();
   }
   window.addEventListener('resize', fitCover);
