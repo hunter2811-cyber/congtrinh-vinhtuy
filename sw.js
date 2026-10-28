@@ -1,7 +1,7 @@
 // Bộ nhớ đệm của app: luôn lấy bản mới từ mạng, mất mạng thì dùng bản đã lưu. Không đụng tới yêu cầu gửi máy chủ.
-const CACHE = 'congtrinh-685a46583bd3';
+const CACHE = 'congtrinh-f2f025e1969b';
 const TILES = 'congtrinh-tiles', TILE_MAX = 1500;   // ảnh nền bản đồ giữ qua các phiên bản, tối đa khoảng 30 MB
-const SHELL = ['./', 'styles.css?v=685a46583bd3', 'app.js?v=685a46583bd3', 'config.js?v=685a46583bd3', 'manifest.webmanifest', 'icons/icon-192.png'];
+const SHELL = ['./', 'styles.css?v=f2f025e1969b', 'app.js?v=f2f025e1969b', 'config.js?v=f2f025e1969b', 'manifest.webmanifest', 'icons/icon-192.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {})); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('congtrinh-') && k !== CACHE && k !== TILES).map(k => caches.delete(k)))).then(() => self.clients.claim()));
