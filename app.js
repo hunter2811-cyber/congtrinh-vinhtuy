@@ -37,7 +37,8 @@
     expand: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     close: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     cam: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
-    dir: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.8 21.2 12 12 21.2 2.8 12z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.2 14.2v-2.4a1 1 0 0 1 1-1h4.3M12.8 8.8l1.9 2-1.9 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    dir: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.8 21.2 12 12 21.2 2.8 12z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.2 14.2v-2.4a1 1 0 0 1 1-1h4.3M12.8 8.8l1.9 2-1.9 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    print: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 9V3.5h10V9M7 17H4.5v-7.5h15V17H17M7 13.5h10v7H7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
   };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase();
@@ -166,6 +167,7 @@
     armed: false, skip: false, t: 0,
     top() {
       if (!$('viewer').hidden) return closeViewer;
+      if (!$('printDoc').hidden) return closeCover;
       if (isOpen($('stSheet'))) return closeStatus;
       if (isOpen($('near'))) return closeNear;
       if (isOpen($('inspect'))) return closeInspect;
@@ -1746,6 +1748,7 @@
         '<div class="d-actions"><button type="button" class="btn primary big" data-inspect>' + ICON.cam + 'Chụp ảnh và kiểm tra</button>' +
           '<a class="btn big" href="' + dirUrl(p) + '" target="_blank" rel="noopener">' + ICON.dir + 'Chỉ đường</a>' +
           (p.phone ? '<a class="btn big" href="tel:' + esc(p.phone.split(/\s|\n/)[0].replace(/[^\d+]/g, '')) + '">Gọi chủ đầu tư</a>' : '<span></span>') + '</div>' +
+        '<div class="d-print"><button type="button" class="btn" data-cover>' + ICON.print + 'In bìa hồ sơ</button></div>' +
         '<div class="card"><div class="card-head"><h2>Hiện trạng</h2><button type="button" class="btn small status-edit" data-status>' + ICON.status + 'Cập nhật</button></div>' + (ph ? '<div class="st-row"><button type="button" class="st-thumb" aria-label="Xem ảnh gần nhất cỡ lớn"><span class="zoom" aria-hidden="true">' + ICON.expand + '</span></button><div>' : '') +
           '<div class="status-now">' + esc(p.status || '—') + '</div><div class="status-src">' + src + '</div>' +
           (ph ? '<div class="status-src">Ảnh gần nhất ' + esc(ph.at) + '. Bấm vào ảnh để xem lớn.</div></div></div>' : '') + '</div>' +
@@ -1771,6 +1774,7 @@
     el.querySelector('[data-close]').onclick = closeDetail;
     el.querySelector('[data-inspect]').onclick = () => openInspect(p.id, { camera: true });
     el.querySelector('.status-edit').onclick = () => openStatus(p.id);
+    el.querySelector('[data-cover]').onclick = () => openCover(p.id);
     if (ph) {
       const b = el.querySelector('.st-thumb');
       fillThumb(b, ph.id, 300, () => state.selected === p.id);
@@ -1779,6 +1783,76 @@
     loadHistory(p.id);
   }
   function closeDetail() { closePanel($('detail')); }
+
+  /* ---------- In bìa hồ sơ (mẫu "Bìa hồ sơ 2026", trước là trộn thư Word) ----------
+     Tự điền từ dữ liệu công trình; bấm vào chữ để sửa tay trước khi in, chỉ sửa trên bản in. */
+  const KV_OF = { I: 'KV-1', II: 'KV-2', III: 'KV-3' };
+  function fmtArea(v) {   // 64.9 → 64,90 (như định dạng 0,00 của mẫu Word)
+    if (v === '' || v == null) return '';
+    const n = typeof v === 'number' ? v : Number(String(v).replace(',', '.'));
+    return isFinite(n) && String(v).trim() !== '' ? n.toFixed(2).replace('.', ',') : String(v);
+  }
+  function coverHtml(p) {
+    const ed = 'contenteditable="true" spellcheck="false"';
+    const val = v => v !== '' && v != null ? esc(String(v)) : '';
+    const fld = v => '<b ' + ed + (val(v) ? '>' + val(v) : ' class="empty">……') + '</b>';
+    const owners = String(p.owner || '').split(' – ').filter(Boolean);
+    const year = p.year || ((String(p.tbkc || '').match(/(\d{4})$/) || [])[1] || '');
+    const stt = String(p.stt == null ? '' : p.stt);
+    return '<div class="cv-frame">' +
+      '<div class="cv-top"><span class="cv-kv" ' + ed + '>' + esc(KV_OF[p.area] || '') + '</span>' +
+        '<span class="cv-year" ' + ed + '>' + esc(String(year)) + '</span>' +
+        '<span class="cv-no' + (stt.length >= 3 ? ' long' : '') + '" ' + ed + '>' + esc(stt) + '</span></div>' +
+      '<div class="cv-title">HỒ SƠ XÂY DỰNG</div>' +
+      '<div class="cv-lines">' +
+        '<div class="cv-row"><span>1 – Chủ đầu tư:&nbsp;</span><b class="cv-owners" ' + ed + '>' + (owners.length ? owners.map(n => '<span>' + esc(n.toLocaleUpperCase('vi')) + '</span>').join('') : '<span class="empty">……</span>') + '</b></div>' +
+        '<div class="cv-row"><span>2 – Địa chỉ:&nbsp;</span>' + fld(p.address) + '</div>' +
+        '<p>3 – Điện thoại: ' + fld(String(p.phone || '').split(/\n/).map(x => x.trim()).filter(Boolean).join(' – ')) + '</p>' +
+        '<p>4 – GPXD số: ' + fld(p.gpxd) + ' ngày: ' + fld(p.gpxdDate) + '</p>' +
+        '<p>5 – DTXD tầng 1: ' + fld(fmtArea(p.dtxd)) + ' <b>m<sup>2</sup></b></p>' +
+        '<p>6 – Tổng DT sàn XD mới: ' + fld(fmtArea(p.dts)) + ' <b>m<sup>2</sup></b></p>' +
+        '<div class="cv-row"><span>7 – Quy mô:&nbsp;</span>' + fld(p.scale) + '</div>' +
+        '<p>8 – Chiều cao công trình: ' + fld(fmtArea(p.height)) + ' <b>m</b></p>' +
+      '</div></div>';
+  }
+  function fitCover() {
+    const el = $('printDoc'), paper = el.querySelector('.pd-paper');
+    if (!paper || el.hidden) return;
+    const box = el.querySelector('.pd-scroll'), pw = paper.offsetWidth, ph = paper.offsetHeight;
+    const k = Math.min(1, (box.clientWidth - 32) / pw);
+    paper.style.transform = k < 1 ? 'scale(' + k + ')' : '';
+    paper.style.marginBottom = k < 1 ? (-(ph * (1 - k))) + 'px' : '';
+    paper.style.marginLeft = k < 1 ? '0' : '';
+  }
+  function openCover(id) {
+    const p = state.byId[id];
+    if (!p) return;
+    const el = $('printDoc');
+    el.innerHTML =
+      '<div class="pd-bar"><button type="button" class="icon-btn" data-close aria-label="Đóng"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+        '<span class="pd-title">Bìa hồ sơ · <span class="num">' + esc(p.id) + '</span></span>' +
+        '<span class="hint">Bấm vào chữ để sửa trước khi in</span>' +
+        '<button type="button" class="btn primary" data-print>' + ICON.print + 'In</button></div>' +
+      '<div class="pd-scroll"><div class="pd-paper">' + coverHtml(p) + '</div></div>';
+    el.hidden = false;
+    document.documentElement.classList.add('in-ho-so');
+    el.querySelector('[data-close]').onclick = closeCover;
+    el.querySelector('[data-print]').onclick = () => {
+      const t = document.title;
+      document.title = 'Bia ho so ' + p.id;   // tên file PDF gợi ý
+      const go = () => { window.print(); setTimeout(() => { document.title = t; }, 1000); };
+      document.fonts && document.fonts.ready ? document.fonts.ready.then(go) : go();
+    };
+    fitCover();
+    back.sync();
+  }
+  function closeCover() {
+    const el = $('printDoc');
+    el.hidden = true; el.innerHTML = '';
+    document.documentElement.classList.remove('in-ho-so');
+    back.sync();
+  }
+  window.addEventListener('resize', fitCover);
 
   function loadHistory(id) {
     call('apiGetHistory', id).then(items => {
