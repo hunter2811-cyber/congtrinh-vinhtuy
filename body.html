@@ -15,6 +15,7 @@
       <nav class="pagetabs" aria-label="Trang">
         <button type="button" data-page="map" aria-current="page">Bản đồ</button>
         <button type="button" data-page="list">Danh sách công trình</button>
+        <button type="button" data-page="report">Báo cáo tuần</button>
       </nav>
       <div class="topbar-right">
         <span class="stamp num" id="stamp"></span>
@@ -109,6 +110,42 @@
             <tbody id="lpRows"></tbody>
           </table>
         </div>
+      </section>
+    </div>
+
+    <!-- Trang báo cáo tuần (máy tính) -->
+    <div class="reportpage" id="pageReport">
+      <aside class="rp-side" aria-label="Thiết lập báo cáo">
+        <section class="rp-sec">
+          <h2 class="rp-h">Kỳ báo cáo</h2>
+          <div class="rp-weeks" id="rpWeeks">
+            <button type="button" class="chip" data-week="-1">Tuần trước</button>
+            <button type="button" class="chip" data-week="0">Tuần này</button>
+          </div>
+          <div class="rp-dates">
+            <label>Từ ngày<input type="date" id="rpFrom"></label>
+            <label>Đến ngày<input type="date" id="rpTo"></label>
+          </div>
+        </section>
+        <section class="rp-sec">
+          <h2 class="rp-h">Tổng hợp</h2>
+          <div class="rp-stats" id="rpStats"></div>
+          <p class="rp-viol" id="rpViol"></p>
+        </section>
+        <div class="rp-acts">
+          <button type="button" class="btn primary big block" id="rpPrint">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2M7 14h10v6H7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            In / Lưu PDF
+          </button>
+          <button type="button" class="btn block" id="rpExcel">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Tải Excel
+          </button>
+        </div>
+      </aside>
+      <section class="rp-main" aria-label="Xem trước báo cáo">
+        <div class="rp-bar"><span>Xem trước · A4 ngang · xếp theo ngày thi công</span><span class="num" id="rpInfo"></span></div>
+        <div class="rp-scroll"><article class="rp-paper" id="rpPaper"></article></div>
       </section>
     </div>
 

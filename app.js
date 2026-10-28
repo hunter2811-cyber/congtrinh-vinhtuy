@@ -413,7 +413,7 @@
     state.filter.q = ''; $('q').value = ''; $('qClear').hidden = true;
     refresh();
   }
-  function refresh() { renderFilters(); renderList(); renderMarkers(); if (app.dataset.page === 'list') renderListPage(); }
+  function refresh() { renderFilters(); renderList(); renderMarkers(); if (app.dataset.page === 'list') renderListPage(); if (app.dataset.page === 'report') renderReport(); }
 
   $('statusChips').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1450,13 +1450,231 @@
       if (b.dataset.page === page) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     closeDetail();
-    const pane = page === 'list' ? $('pageList') : document.querySelector('.main');
+    const pane = page === 'list' ? $('pageList') : page === 'report' ? $('pageReport') : document.querySelector('.main');
     if (!calm()) gsap.fromTo(pane, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.45, ease: 'expo.out', clearProps: 'transform,opacity,visibility' });
     if (page === 'list') renderListPage(true);
+    else if (page === 'report') renderReport();
     else if (state.engine) setTimeout(() => { state.engine.resize(); renderMarkers(); }, 50);
     store.set('page', page);
   }
   document.querySelector('.pagetabs').addEventListener('click', e => { const b = e.target.closest('[data-page]'); if (b) setPage(b.dataset.page); });
+
+  /* ---------------- Báo cáo tuần ---------------- */
+  // Lập theo mẫu tab "Bao cao tuan": chia khu I, II, III theo cột Địa bàn, khu IV là công trình đã thông báo khởi công
+  // nhưng chưa thi công. Bỏ công trình đã xong hoặc đã đưa vào sử dụng. Trong mỗi khu xếp theo ngày thi công.
+  const REPORT = {
+    org: ['UBND PHƯỜNG VĨNH TUY', 'PHÒNG HẠ TẦNG, ĐÔ THỊ VÀ MÔI TRƯỜNG'],
+    nation: ['CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', 'Độc lập - Tự do - Hạnh phúc'],
+    title: 'BÁO CÁO CÁC CÔNG TRÌNH ĐANG XÂY DỰNG TRÊN ĐỊA BÀN PHƯỜNG VĨNH TUY',
+    sections: [
+      { key: 'I', title: 'I. KV 1 - PHÍA BẮC PHỐ LẠC TRUNG (TDP 1÷7)' },
+      { key: 'II', title: 'II. KV 2 - PHÍA NAM PHỐ LẠC TRUNG ĐẾN PHÍA BẮC PHỐ MINH KHAI (TDP 8÷16)' },
+      { key: 'III', title: 'III. KV 3 - PHÍA NAM PHỐ MINH KHAI (TDP 17÷38)' },
+      { key: '?', title: 'CÔNG TRÌNH CHƯA GHI ĐỊA BÀN' },   // chỉ hiện khi có
+      { key: 'IV', title: 'IV. CÁC CÔNG TRÌNH ĐÃ THÔNG BÁO KHỞI CÔNG' }
+    ],
+    // Dòng tổng hợp theo file mẫu anh căn chỉnh (28/10): nhãn bên trái căn phải, nội dung bắt đầu từ cột Số GPXD
+    summary: d => [
+      ['Tổng số ' + d.total + ' công trình, trong đó:', ' ' + d.legal + ' đúng phép; ' + d.unlicensed + ' công trình không phép; ' + d.wrong + ' công trình sai phép;'],
+      ['', '- ' + d.building + ' công trình đang thi công;'],
+      ['', ' - ' + d.notice + ' công trình đã thông báo khởi công.'],
+      ['Tổng số vi phạm: ', d.wrong + ' sai phép + ' + d.unlicensed + ' không phép = ' + (d.wrong + d.unlicensed) + ' công trình.']
+    ],
+    signers: [
+      { role: 'TỔ VIÊN', name: '' },
+      { role: 'PHÓ PHÒNG', name: 'Vũ Huy Khiêm' },
+      { role: 'TRƯỞNG PHÒNG', name: 'Phạm Ngọc Hưng' }
+    ]
+  };
+  const REPORT_COLS = [5, 32.86, 7, 7, 7, 26, 26.71, 24.57, 11.86, 8];   // độ rộng cột theo file mẫu anh căn chỉnh (đơn vị Excel)
+  const REPORT_W = REPORT_COLS.reduce((a, b) => a + b, 0);
+  const DAY = 864e5;
+  const rp = { from: 0, to: 0, week: 0 };
+  const isoDate = t => { const d = new Date(t); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  const dmy = t => { const d = new Date(t); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(); };
+  const fromIso = v => { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : 0; };
+  /** Kỳ báo cáo từ thứ Bảy đến thứ Sáu (anh chốt 28/10, ví dụ 24/10–30/10/2026). week = 0 là tuần này, -1 là tuần trước. */
+  function reportWeek(week) {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    const back = (d.getDay() + 1) % 7;   // số ngày từ thứ Bảy gần nhất
+    const from = new Date(d.getFullYear(), d.getMonth(), d.getDate() - back + week * 7).getTime();
+    return { from, to: new Date(from).setDate(new Date(from).getDate() + 6) };
+  }
+  /** Chủ đầu tư: mỗi người một dòng (file gốc ghi Ông – Bà). */
+  function reportOwners(p) { return String(p.owner || '').split(/\s+–\s+|\n/).map(x => x.trim()).filter(Boolean); }
+  function reportSteps(p) {
+    const out = [];
+    if (p.tbkc) out.push('TBKC: ' + p.tbkc);
+    (p.checks || []).forEach((c, i) => { const d = c.bb || c.tb; if (d) out.push('KT lần ' + (i + 1) + ': ' + d); });
+    return out.join('\n');
+  }
+  function reportData() {
+    const to = rp.to + DAY - 1;
+    // Khu I, II, III xếp theo ngày thi công (cũ trước, mới sau); khu IV xếp theo ngày thông báo khởi công
+    const order = p => dateValue(p.start) || dateValue(p.tbkc) || Infinity;
+    const idNum = p => { const m = String(p.id).match(/^(\d{4})-(\d+)$/); return m ? +m[1] * 1e4 + +m[2] : 1e9; };
+    const rows = state.projects.filter(p => {
+      const st = stageOf(p);
+      if (st === 'hoanthanh' || st === 'sudung') return false;
+      const first = Math.min(dateValue(p.tbkc) || Infinity, dateValue(p.start) || Infinity);
+      return !(first !== Infinity && first > to);   // công trình mới có sau kỳ báo cáo thì chưa tính
+    });
+    const by = {};
+    rows.forEach(p => {
+      // Khu IV: hiện trạng "chưa thi công" và chưa có ngày thi công; có ngày thi công rồi thì chuyển về khu I, II, III
+      const key = stageOf(p) === 'chua' && !dateValue(p.start) ? 'IV' : (['I', 'II', 'III'].indexOf(p.area) >= 0 ? p.area : '?');
+      (by[key] = by[key] || []).push(p);
+    });
+    let tt = 0;
+    const sections = REPORT.sections.filter(s => s.key !== '?' || by['?']).map(s => ({
+      key: s.key, title: s.title,
+      rows: (by[s.key] || []).sort((a, b) => order(a) - order(b) || idNum(a) - idNum(b)).map(p => ({
+        id: p.id, tt: ++tt, owners: reportOwners(p), address: p.address,
+        permit: [p.gpxd, p.gpxdDate ? 'ngày ' + p.gpxdDate : ''].filter(Boolean).join(' '),
+        scale: p.scale, status: p.status || '', steps: reportSteps(p), note: p.note || ''
+      }))
+    }));
+    const total = rows.length, notice = (by.IV || []).length;
+    // App chỉ quản lý công trình có phép: mọi công trình đánh dấu "Có phép", số vi phạm bằng 0 như mẫu
+    return { sections, total, legal: total, unlicensed: 0, wrong: 0, building: total - notice, notice, noArea: (by['?'] || []).length };
+  }
+  function renderReport() {
+    if (!rp.from) setReportWeek(0, true);
+    const d = reportData();
+    $('rpStats').innerHTML = [
+      [d.total, 'Tổng số công trình'], [d.legal, 'Đúng phép'], [d.building, 'Đang thi công'], [d.notice, 'Đã TB khởi công']
+    ].map(x => '<div class="rp-stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('');
+    $('rpViol').innerHTML = 'Vi phạm: ' + d.wrong + ' sai phép + ' + d.unlicensed + ' không phép = <b>' + (d.wrong + d.unlicensed) + '</b> công trình';
+    $('rpInfo').textContent = d.total + ' công trình';
+    const cell = (v, cls) => '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td>';
+    const body = d.sections.map(sec => '<tr class="sec"><td colspan="10">' + esc(sec.title) + '</td></tr>' +
+      (sec.rows.length ? sec.rows.map(r => '<tr data-id="' + esc(r.id) + '">' +
+        cell(r.tt, 'c') + cell(r.owners.map(o => '<b>' + esc(o) + '</b><br>').join('') + esc(r.address)) + cell('x', 'c') + cell('') + cell('') +
+        cell(esc(r.permit) + (r.scale ? '<br>' + esc(r.scale) : '')) + cell(esc(r.status)) + cell(esc(r.steps), 'steps') + cell(esc(r.note)) + cell('') +
+        '</tr>').join('') : '')).join('');
+    $('rpPaper').innerHTML =
+      (d.noArea ? '<p class="rp-noarea">' + d.noArea + ' công trình chưa ghi cột Địa bàn trong file dữ liệu nên chưa xếp được vào khu I, II, III. Anh bổ sung trong file rồi tải lại.</p>' : '') +
+      '<div class="rp-head"><div><span>' + REPORT.org[0] + '</span><b>' + REPORT.org[1] + '</b></div><div><b>' + REPORT.nation[0] + '</b><b class="u">' + REPORT.nation[1] + '</b></div></div>' +
+      '<h1>' + REPORT.title + '</h1><p class="rp-period">(Từ ' + dmy(rp.from) + ' đến ' + dmy(rp.to) + ')</p>' +
+      '<div class="rp-sum">' + REPORT.summary(d).map(x => '<span>' + esc(x[0]) + '</span><span>' + esc(x[1]) + '</span>').join('') + '</div>' +
+      '<table class="rp-table"><colgroup>' + REPORT_COLS.map(w => '<col style="width:' + (w / REPORT_W * 100).toFixed(2) + '%">').join('') + '</colgroup>' +
+      '<thead><tr><th rowspan="2">TT</th><th rowspan="2">Tên chủ đầu tư, địa điểm xây dựng</th><th colspan="3">Cơ sở pháp lý</th><th rowspan="2">Số GPXD<br>Ngày cấp<br>Quy mô</th><th rowspan="2">Hiện trạng công trình</th><th rowspan="2">Biện pháp xử lý</th><th rowspan="2">Ghi chú</th><th rowspan="2">Đơn thư</th></tr>' +
+      '<tr><th class="sub">Có phép</th><th class="sub">Không phép</th><th class="sub">Sai phép</th></tr></thead><tbody>' + body + '</tbody></table>' +
+      '<div class="rp-sign">' + REPORT.signers.map(s => '<div><b>' + s.role + '</b><span class="name">' + esc(s.name) + '</span></div>').join('') + '</div>';
+    // Ô ký và dòng tổng hợp thẳng theo cột như bản Excel: Tổ viên trên cột TT–Số GPXD, Phó phòng trên Hiện trạng, Trưởng phòng trên ba cột cuối
+    const pc = (a, b) => (REPORT_COLS.slice(a, b).reduce((x, y) => x + y, 0) / REPORT_W * 100).toFixed(2) + '%';
+    $('rpPaper').querySelector('.rp-sign').style.gridTemplateColumns = pc(0, 6) + ' ' + pc(6, 7) + ' ' + pc(7, 10);
+    $('rpPaper').querySelector('.rp-sum').style.gridTemplateColumns = pc(0, 5) + ' 1fr';
+  }
+  function setReportWeek(week, quiet) {
+    const w = reportWeek(week);
+    rp.week = week; rp.from = w.from; rp.to = w.to;
+    $('rpFrom').value = isoDate(rp.from); $('rpTo').value = isoDate(rp.to);
+    $('rpWeeks').querySelectorAll('[data-week]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.week === week)));
+    if (!quiet) renderReport();
+  }
+  $('rpWeeks').addEventListener('click', e => { const b = e.target.closest('[data-week]'); if (b) setReportWeek(+b.dataset.week); });
+  ['rpFrom', 'rpTo'].forEach(id => $(id).addEventListener('change', () => {
+    const f = fromIso($('rpFrom').value), t = fromIso($('rpTo').value);
+    if (!f || !t) return;
+    rp.from = Math.min(f, t); rp.to = Math.max(f, t); rp.week = null;
+    $('rpWeeks').querySelectorAll('[data-week]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    renderReport();
+  }));
+  $('rpPaper').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) openDetail(tr.dataset.id); });
+  $('rpPrint').onclick = () => {
+    renderReport();
+    const t = document.title;
+    document.title = 'Bao cao tuan ' + dmy(rp.from).replace(/\//g, '-') + ' den ' + dmy(rp.to).replace(/\//g, '-');   // tên file PDF gợi ý
+    document.documentElement.classList.add('in-bao-cao');
+    window.print();
+    document.documentElement.classList.remove('in-bao-cao');
+    document.title = t;
+  };
+
+  /** Tải Excel (.xlsx) cùng bố cục với bản in. Thư viện ExcelJS chỉ tải khi bấm nút. */
+  let excelLib = null;
+  function loadExcel() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    return excelLib || (excelLib = new Promise((ok, fail) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js';
+      sc.onload = () => ok(window.ExcelJS);
+      sc.onerror = () => { excelLib = null; fail(new Error('Không tải được thư viện Excel, anh kiểm tra mạng rồi thử lại.')); };
+      document.head.appendChild(sc);
+    }));
+  }
+  $('rpExcel').onclick = () => {
+    const btn = $('rpExcel'); btn.disabled = true;
+    loadExcel().then(X => buildExcel(X, reportData())).then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'Bao cao tuan ' + dmy(rp.from).replace(/\//g, '-') + ' den ' + dmy(rp.to).replace(/\//g, '-') + '.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast('Đã tải file Excel', 2500, true);
+    }).catch(e => toast(e.message || 'Không tạo được file Excel')).then(() => { btn.disabled = false; });
+  };
+  function buildExcel(X, d) {
+    // Bố cục theo file mẫu anh căn chỉnh lại (28/10)
+    const wb = new X.Workbook();
+    const ws = wb.addWorksheet('Bao cao tuan', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true,
+        margins: { left: 0.3937, right: 0.3937, top: 0.5118, bottom: 0.5118, header: 0.3, footer: 0.3 } }
+    });
+    ws.columns = REPORT_COLS.map(w => ({ width: w }));
+    const F = { name: 'Times New Roman', size: 12 };
+    const LINE = 15.75;
+    const thin = { style: 'thin' }, box = { top: thin, left: thin, bottom: thin, right: thin };
+    const put = (r, c, v, o) => { const x = ws.getCell(r, c); x.value = v; x.font = Object.assign({}, F, o && o.font); x.alignment = Object.assign({ vertical: 'middle', wrapText: true }, o && o.align); if (o && o.border) x.border = box; return x; };
+    const merge = (r1, c1, r2, c2, v, o) => { if (r1 !== r2 || c1 !== c2) ws.mergeCells(r1, c1, r2, c2); return put(r1, c1, v, o); };
+    const mid = { horizontal: 'center', vertical: 'middle' };
+    // Số dòng chữ một ô chiếm khi in (ước lượng theo độ rộng cột) để đặt chiều cao hàng
+    const lines = (text, col) => String(text || '').split('\n').reduce((n, t) => n + Math.max(1, Math.ceil(t.length / (REPORT_COLS[col - 1] * 1.05))), 0);
+    merge(1, 2, 1, 5, REPORT.org[0], { align: mid });
+    merge(2, 2, 2, 5, REPORT.org[1], { align: mid, font: { bold: true } });
+    merge(1, 7, 1, 10, REPORT.nation[0], { align: mid, font: { bold: true } });
+    merge(2, 7, 2, 10, REPORT.nation[1], { align: mid, font: { bold: true, underline: true } });
+    merge(4, 1, 4, 10, REPORT.title, { align: mid, font: { bold: true, size: 13 } });
+    merge(5, 1, 5, 10, '(Từ ' + dmy(rp.from) + ' đến ' + dmy(rp.to) + ')', { align: mid, font: { italic: true } });
+    REPORT.summary(d).forEach((x, i) => {
+      if (x[0]) put(6 + i, 5, x[0], { align: { horizontal: 'right', wrapText: false } });
+      put(6 + i, 6, x[1], { align: { wrapText: false } });
+    });
+    [1, 2, 4, 5, 6, 7, 8, 9].forEach(r => { ws.getRow(r).height = r === 4 ? 16.5 : LINE; });
+    const H = { align: mid, font: { bold: true }, border: true };
+    const heads = ['TT', 'Tên chủ đầu tư, địa điểm xây dựng', null, null, null, 'Số GPXD\nNgày cấp\nQuy mô', 'Hiện trạng công trình', 'Biện pháp xử lý', 'Ghi chú', 'Đơn thư'];
+    heads.forEach((h, i) => { if (h) merge(11, i + 1, 12, i + 1, h, H); });
+    merge(11, 3, 11, 5, 'Cơ sở pháp lý', H);
+    ['Có phép', 'Không phép', 'Sai phép'].forEach((h, i) => put(12, 3 + i, h, { align: mid, border: true }));
+    for (let c = 1; c <= 10; c++) ws.getCell(11, c).border = ws.getCell(12, c).border = box;
+    ws.getRow(11).height = ws.getRow(12).height = 32.1;
+    ws.pageSetup.printTitlesRow = '11:12';
+    let r = 13;
+    d.sections.forEach(sec => {
+      merge(r, 1, r, 10, sec.title, { font: { bold: true }, border: true, align: { horizontal: 'left' } });
+      for (let c = 1; c <= 10; c++) ws.getCell(r, c).border = box;
+      ws.getRow(r).height = LINE;
+      r++;
+      sec.rows.forEach(x => {
+        const permit = [x.permit, x.scale].filter(Boolean).join('\n');
+        const vals = [x.tt, null, 'x', '', '', permit, x.status, x.steps, x.note, ''];
+        vals.forEach((v, i) => put(r, i + 1, v, { border: true, align: i === 0 || (i >= 2 && i <= 4) ? { horizontal: 'center' } : null }));
+        ws.getCell(r, 2).value = { richText: [{ text: x.owners.join('\n'), font: Object.assign({ bold: true }, F) }, { text: '\n' + x.address, font: F }] };
+        const n = Math.max(2, lines(x.owners.join('\n') + '\n' + x.address, 2), lines(permit, 6), lines(x.status, 7), lines(x.steps, 8), lines(x.note, 9));
+        ws.getRow(r).height = (n + 1) * LINE;   // chừa thêm một dòng cho thoáng như file mẫu
+        r++;
+      });
+    });
+    r += 2;   // hai hàng trống rồi tới chữ ký, tên người ký cách 5 hàng
+    const sign = [[1, 6], [7, 7], [8, 10]];
+    REPORT.signers.forEach((s, i) => {
+      merge(r, sign[i][0], r, sign[i][1], s.role, { align: mid, font: { bold: true } });
+      if (s.name) merge(r + 6, sign[i][0], r + 6, sign[i][1], s.name, { align: mid, font: { bold: true } });
+    });
+    ws.getRow(r).height = ws.getRow(r + 6).height = LINE;
+    return wb.xlsx.writeBuffer().then(buf => new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  }
 
   /* ---------------- Sáng / tối ---------------- */
 
@@ -1928,7 +2146,7 @@
   // Máy tính: bản đồ mặc định chỉ hiện công trình đang thi công (bấm nút lọc để bật thêm)
   if (!isPhone()) ACTIVE_GROUPS.forEach(g => state.filter.groups.add(g));
   lpReset();
-  if (!isPhone() && store.get('page') === 'list') setPage('list');
+  if (!isPhone() && ['list', 'report'].indexOf(store.get('page')) >= 0) setPage(store.get('page'));
   watchMe();
   const savedArea = store.get('area');
   if (savedArea && (CONF.areas || []).some(a => a.code === savedArea)) state.area = savedArea;
