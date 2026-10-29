@@ -388,6 +388,12 @@ textarea.input { min-height: 88px; resize: vertical; }
 .lp-table .c-st span.dot { margin-right: 7px; vertical-align: 0; }
 .lp-table .old, .lp-table .noloc { color: var(--warn-ink); }
 .lp-table .faint { color: var(--faint); }
+.lp-table td.c-loc { padding-top: 6px; padding-bottom: 6px; }
+.lp-map { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px 0 7px; border-radius: 999px; border: 1px solid var(--control); background: transparent; color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
+.lp-map svg { width: 15px; height: 15px; color: var(--primary); }
+.lp-map:hover { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.lp-map:hover svg { color: currentColor; }
+.lp-map:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .lp-empty { padding: 40px 12px; text-align: center; color: var(--muted); }
 /* Hồ sơ mở bên phải khi đang ở trang danh sách */
 .app[data-page="list"] ~ .sheet, .app[data-page="list"] .sheet { left: auto; right: 0; border-right: 0; border-left: 1px solid var(--border); --sheet-from: translateX(24px); }
