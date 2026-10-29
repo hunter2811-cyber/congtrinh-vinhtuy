@@ -39,6 +39,7 @@
     close: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     cam: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
     dir: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.8 21.2 12 12 21.2 2.8 12z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.2 14.2v-2.4a1 1 0 0 1 1-1h4.3M12.8 8.8l1.9 2-1.9 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
     print: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 9V3.5h10V9M7 17H4.5v-7.5h15V17H17M7 13.5h10v7H7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
   };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -401,7 +402,7 @@
         '<span class="row-sub"><span class="st">' + esc(p.status || '—') + '</span>' + dist + locFlag + '</span>' +
         agoLine(p) + '</span>' +
         '<span class="row-acts">' +
-          (p.loc ? '<a class="act" href="' + dirUrl(p) + '" target="_blank" rel="noopener" data-dir aria-label="Chỉ đường đến ' + esc(p.owner) + '" title="Chỉ đường (Google Maps)">' + ICON.dir + '</a>' : '') +
+          (p.loc ? '<button type="button" class="act" data-map aria-label="Xem ' + esc(p.owner) + ' trên bản đồ" title="Xem trên bản đồ">' + ICON.pin + '</button>' : '') +
           (tel ? '<a class="act call" href="tel:' + esc(tel) + '" data-call aria-label="Gọi chủ đầu tư ' + esc(p.owner) + '" title="Gọi chủ đầu tư">' + ICON.call + '</a>' : '') +
         '</span>' +
         '</li>';
@@ -450,7 +451,8 @@
   });
   $('rows').addEventListener('click', e => {
     const li = e.target.closest('.row'); if (!li) return;
-    if (e.target.closest('[data-dir], [data-call]')) return;   // link chỉ đường / gọi điện tự mở
+    if (e.target.closest('[data-call]')) return;   // link gọi điện tự mở
+    if (e.target.closest('[data-map]')) { showOnMap(li.dataset.id); return; }
 
     selectProject(li.dataset.id, 'list');
   });
@@ -1421,7 +1423,9 @@
         '<td class="c-start">' + esc(p.start || '—') + '</td>' +
         '<td class="c-st">' + dot(p.group) + esc(p.status || '—') + '</td>' +
         '<td class="' + (a.old ? 'old' : 'faint') + '">' + esc(a.none ? '—' : a.text) + '</td>' +
-        '<td class="' + (p.loc ? 'faint' : 'noloc') + '">' + (p.loc ? 'Đã có' : 'Chưa có') + '</td></tr>';
+        '<td class="c-loc">' + (p.loc
+          ? '<button type="button" class="lp-map" data-map aria-label="Xem ' + esc(p.owner) + ' trên bản đồ" title="Xem trên bản đồ">' + ICON.pin + 'Bản đồ</button>'
+          : '<span class="noloc">Chưa có</span>') + '</td></tr>';
     }).join('');
     if (animate && !calm()) {
       const rows = Array.from($('lpRows').children).slice(0, 18);
@@ -1462,8 +1466,27 @@
     tr.setAttribute('aria-selected', 'true');
     openDetail(tr.dataset.id);
   }
-  $('lpRows').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) openFromTable(tr); });
+  $('lpRows').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+    if (e.target.closest('[data-map]')) showOnMap(tr.dataset.id); else openFromTable(tr);
+  });
   $('lpRows').addEventListener('keydown', e => { if (e.key === 'Enter') { const tr = e.target.closest('tr[data-id]'); if (tr) openFromTable(tr); } });
+
+  /** Từ danh sách: sang bản đồ, bay tới công trình và mở popup (máy tính) / thẻ thông tin (điện thoại).
+      Công trình đang bị bộ lọc của bản đồ ẩn thì nới bộ lọc vừa đủ để thấy marker. */
+  function showOnMap(id) {
+    const p = state.byId[id]; if (!p || !p.loc) return;
+    if (!matches(p)) {
+      const f = state.filter;
+      if (f.groups.size && !f.groups.has(p.group)) f.groups.add(p.group);
+      if (f.noLoc) f.noLoc = false;
+      if (f.q && !matches(p, 'areas')) { f.q = ''; $('q').value = ''; $('qClear').hidden = true; }
+      if (state.area && p.area !== state.area) setArea('');
+      renderFilters(); renderList(); renderMarkers();
+    }
+    if (isPhone()) { goView('map'); setTimeout(() => selectProject(id, 'map'), 80); }
+    else { setPage('map'); setTimeout(() => selectProject(id, 'list'), 120); }
+  }
 
   function setPage(page) {
     if (app.dataset.page === page) return;
