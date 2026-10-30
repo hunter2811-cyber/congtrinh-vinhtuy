@@ -1635,7 +1635,7 @@
     const t = document.title;
     document.title = 'Bao cao tuan ' + dmy(rp.from).replace(/\//g, '-') + ' den ' + dmy(rp.to).replace(/\//g, '-');   // tên file PDF gợi ý
     document.documentElement.classList.add('in-bao-cao');
-    printPage('size: A4 landscape; margin: 12mm 10mm;');
+    printPage('size: A4 landscape; margin: 0;');   // lề 0 để trình duyệt không in header/footer (ngày, link, số trang); lề thật nằm ở .rp-paper
     window.print();
     printPage('');
     document.documentElement.classList.remove('in-bao-cao');

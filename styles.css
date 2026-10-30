@@ -649,7 +649,7 @@ textarea.input { min-height: 88px; resize: vertical; }
   html.in-bao-cao, html.in-bao-cao body { height: auto !important; background: #fff !important; }
   html.in-bao-cao > *:not(body), html.in-bao-cao body > *:not(.app), html.in-bao-cao .app > *:not(.reportpage), html.in-bao-cao .rp-side, html.in-bao-cao .rp-bar, html.in-bao-cao .rp-noarea { display: none !important; }
   html.in-bao-cao .app, html.in-bao-cao .reportpage, html.in-bao-cao .rp-main, html.in-bao-cao .rp-scroll { display: block !important; height: auto !important; overflow: visible !important; padding: 0 !important; background: #fff !important; border: 0 !important; }
-  html.in-bao-cao .rp-paper { width: auto; padding: 0; box-shadow: none !important; background: #fff; color: #000; font-size: 12pt; }
+  html.in-bao-cao .rp-paper { width: auto; padding: 12mm 10mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; box-shadow: none !important; background: #fff; color: #000; font-size: 12pt; }
   html.in-bao-cao .rp-table { font-size: 11pt; }
 }
 /* In bìa hồ sơ (theo mẫu "Bìa hồ sơ 2026"): lớp xem trước khổ A4, sửa tay trước khi in */
