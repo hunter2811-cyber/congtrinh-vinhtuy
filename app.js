@@ -2242,24 +2242,27 @@
       del: ks => ks.length ? tx('readwrite', st => { ks.forEach(k => st.delete(k)); }) : Promise.resolve()
     };
   })();
-  const SMALL = 300;   // cỡ ảnh nhỏ dùng chung cho thẻ, hồ sơ và ảnh hiện tạm ở popup
+  // Hai cỡ ảnh thu nhỏ, đều nhớ trong máy: ảnh nhỏ cho thẻ điện thoại và hồ sơ, ảnh vừa cho popup bản đồ trên máy tính
+  const SMALL = 300, MEDIUM = 800;
+  const kept = size => size === SMALL || size === MEDIUM;
   function thumb(fid, size, pid) {
     const k = fid + '@' + size;
-    return thumbCache[k] || (thumbCache[k] = (size === SMALL ? idb.get(k) : Promise.resolve(null)).then(hit => hit ||
-      call('apiGetThumb', { id: fid, size, pid: pid || '', latest: !!pid }).then(url => { if (size === SMALL) idb.set(k, url); return url; })
+    return thumbCache[k] || (thumbCache[k] = (kept(size) ? idb.get(k) : Promise.resolve(null)).then(hit => hit ||
+      call('apiGetThumb', { id: fid, size, pid: pid || '', latest: !!pid }).then(url => { if (kept(size)) idb.set(k, url); return url; })
     ).catch(e => { delete thumbCache[k]; throw e; }));
   }
-  /** Ảnh nhỏ đã có sẵn trong máy (không gọi máy chủ), không có thì null. */
-  function thumbLocal(fid) {
-    const k = fid + '@' + SMALL;
+  /** Ảnh thu nhỏ đã có sẵn trong máy (không gọi máy chủ), không có thì null. */
+  function thumbLocal(fid, size) {
+    const k = fid + '@' + (size || SMALL);
     return (thumbCache[k] || idb.get(k)).then(x => x || null, () => null);
   }
-  /** Thu nhỏ ảnh (data URL) còn cạnh dài ~320 px, để lưu làm ảnh nhỏ. */
-  function makeSmall(dataUrl) {
+  /** Thu nhỏ ảnh (data URL) còn cạnh dài ~edge px: 320 cho ảnh nhỏ, 640 cho ảnh vừa. */
+  function makeSmall(dataUrl, edge) {
+    edge = edge || 320;
     return new Promise(res => {
       const img = new Image();
       img.onload = () => {
-        const k = Math.min(1, 320 / Math.max(img.width, img.height));
+        const k = Math.min(1, edge / Math.max(img.width, img.height));
         const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
         res(c.toDataURL('image/jpeg', 0.72));
@@ -2270,14 +2273,16 @@
   }
   /** Tải ảnh lên kèm ảnh nhỏ. latest: đây là ảnh mới nhất của lần lưu (ảnh nhỏ của công trình được thay bằng ảnh này). */
   function uploadPhoto(p, dataUrl, index, caption, latest) {
-    return makeSmall(dataUrl).then(small => call('apiUploadPhoto', { id: p.id, dataUrl, index, caption, thumb: latest ? small : '', latest: !!latest })
-      .then(res => { seedThumb(res.fileId, dataUrl, small); return res; }));
+    return Promise.all([makeSmall(dataUrl, 320), latest ? makeSmall(dataUrl, 640) : '']).then(([small, medium]) =>
+      call('apiUploadPhoto', { id: p.id, dataUrl, index, caption, thumb: latest ? small : '', thumbM: medium, latest: !!latest })
+        .then(res => { seedThumb(res.fileId, dataUrl, small, medium); return res; }));
   }
   /** Ảnh vừa chụp trên máy này: dùng luôn bản đã nén, không phải tải lại từ máy chủ. */
-  function seedThumb(fid, dataUrl, small) {
-    thumbCache[fid + '@800'] = Promise.resolve(dataUrl);
+  function seedThumb(fid, dataUrl, small, medium) {
+    thumbCache[fid + '@' + MEDIUM] = Promise.resolve(medium || dataUrl);
     thumbCache[fid + '@' + SMALL] = Promise.resolve(small || dataUrl);
     if (small) idb.set(fid + '@' + SMALL, small);
+    if (medium) idb.set(fid + '@' + MEDIUM, medium);
   }
   /**
    * Sau khi có danh sách công trình: tải một lượt các ảnh nhỏ còn thiếu trong máy (một lần gọi máy chủ),
@@ -2295,11 +2300,15 @@
       keys.forEach(k => { have[String(k)] = true; });
       const old = keys.filter(k => !latest[String(k).split('@')[0]]);
       idb.del(old);
-      const need = Object.keys(latest).filter(f => !have[f + '@' + SMALL]);
-      if (!need.length) return;
-      return call('apiGetThumbs', { ids: need }).then(map => {
-        Object.keys(map || {}).forEach(f => { const k = f + '@' + SMALL; thumbCache[k] = Promise.resolve(map[f]); idb.set(k, map[f]); });
-      });
+      // Ảnh nhỏ: mọi máy. Ảnh vừa: chỉ máy tính (điện thoại không có popup bản đồ)
+      const kinds = [['small', SMALL]].concat(window.matchMedia('(min-width: 900px)').matches ? [['medium', MEDIUM]] : []);
+      return kinds.reduce((chain, [kind, size]) => chain.then(() => {
+        const need = Object.keys(latest).filter(f => !have[f + '@' + size]);
+        if (!need.length) return;
+        return call('apiGetThumbs', { ids: need, kind }).then(map => {
+          Object.keys(map || {}).forEach(f => { const k = f + '@' + size; thumbCache[k] = Promise.resolve(map[f]); idb.set(k, map[f]); });
+        });
+      }), Promise.resolve());
     }).catch(() => { /* lỗi thì ảnh vẫn tải từng cái như cũ */ });
   }
   /** Đặt ảnh thu nhỏ làm nền ô (cắt giữa, vừa mọi tỷ lệ ảnh). still(): ô vẫn còn đúng công trình. */
@@ -2381,8 +2390,8 @@
       };
       img.src = url;
     };
-    thumbLocal(ph.id).then(url => { if (url) show(url, false); });
-    thumb(ph.id, 800, p.id).then(url => show(url, true))
+    thumbLocal(ph.id, MEDIUM).then(m => m || thumbLocal(ph.id, SMALL)).then(url => { if (url) show(url, false); });
+    thumb(ph.id, MEDIUM, p.id).then(url => show(url, true))
       .catch(() => { if (!box.querySelector('img')) { box.classList.remove('loading'); box.classList.add('failed'); } });
   }
   function hidePop() { const el = $('mpop'); if (el.hidden) return; el.hidden = true; el.innerHTML = ''; el.dataset.id = ''; $('panelMap').classList.remove('pop-open'); }
