@@ -1848,6 +1848,7 @@
     const p = state.byId[id]; if (!p) return;
     const admin = state.user && state.user.role === 'admin';
     const el = $('detail');
+    el.dataset.pid = id;
     const src = statusSource(p, true);
     const ph = p.last && p.last.photo;
     const loc = p.loc
@@ -1901,7 +1902,8 @@
     if (ld) ld.onclick = () => askDeleteLoc(p.id);
     if (ph) {
       const b = el.querySelector('.st-thumb');
-      fillThumb(b, ph.id, 300, () => state.selected === p.id, p.id);
+      // Hồ sơ mở từ danh sách hay báo cáo tuần không đổi công trình đang chọn trên bản đồ: kiểm tra theo công trình của hồ sơ
+      fillThumb(b, ph.id, 300, () => el.dataset.pid === p.id, p.id);
       b.onclick = () => openPhoto(ph.id, b.dataset.src);
     }
     loadHistory(p.id);
