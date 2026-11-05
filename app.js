@@ -285,6 +285,7 @@
     renderFilters(); renderList(); renderMarkers(); updateNear();
     if (app.dataset.page === 'list') renderListPage();
     if (outbox.jobs.length) outbox.kick();
+    prefetchThumbs();
     if (state.selected && state.byId[state.selected] && isOpen($('detail'))) openDetail(state.selected);
     if (!viaScriptRun) {
       if (install.prompt) install.show('android');
@@ -1028,7 +1029,7 @@
         '<a class="btn big" href="' + dirUrl(p) + '" target="_blank" rel="noopener">' + ICON.dir + 'Chỉ đường</a>' +
         '<button type="button" class="btn big" data-act="detail">Hồ sơ</button></div>';
     openPanel(el); $('nearFab').hidden = true;
-    if (ph) fillThumb(el.querySelector('.peek-thumb'), ph.id, 300, () => state.selected === p.id);   // ảnh nhỏ chỉ để xem, chạm không mở
+    if (ph) fillThumb(el.querySelector('.peek-thumb'), ph.id, 300, () => state.selected === p.id, p.id);   // ảnh nhỏ chỉ để xem, chạm không mở
     el.querySelector('[data-act="cam"]').onclick = () => { hidePeek(); quickPhoto(p.id); };
     el.querySelector('[data-act="detail"]').onclick = () => { hidePeek(); openDetail(p.id); };
     el.querySelector('[data-act="status"]').onclick = () => { hidePeek(); openStatus(p.id); };   // cập nhật hiện trạng không cần chụp ảnh
@@ -1160,7 +1161,7 @@
       if (pos) lines.push(fmtCoord(pos.lat) + ', ' + fmtCoord(pos.lng) + '  ±' + Math.round(pos.acc) + ' m');
       lines.push(p.id + ' · ' + p.address);
       return processImage(file, lines);
-    }).then(dataUrl => call('apiUploadPhoto', { id: p.id, dataUrl, index: 1, caption: '' }).then(up => { seedThumb(up.fileId, dataUrl); return up; }))
+    }).then(dataUrl => uploadPhoto(p, dataUrl, 1, '', true))
       .then(up => {
         // Công trình chưa có vị trí thì lấy luôn vị trí lúc chụp (nếu GPS đủ chính xác)
         const move = !p.loc && !!pos && pos.acc <= 30;
@@ -1900,7 +1901,7 @@
     if (ld) ld.onclick = () => askDeleteLoc(p.id);
     if (ph) {
       const b = el.querySelector('.st-thumb');
-      fillThumb(b, ph.id, 300, () => state.selected === p.id);
+      fillThumb(b, ph.id, 300, () => state.selected === p.id, p.id);
       b.onclick = () => openPhoto(ph.id, b.dataset.src);
     }
     loadHistory(p.id);
@@ -2219,16 +2220,92 @@
 
   // Ảnh thu nhỏ đã tải (theo file và cỡ), dùng lại khi mở lại thẻ / popup
   const thumbCache = {};
-  function thumb(fid, size) {
+  /*
+   * Kho ảnh nhỏ trong máy (IndexedDB): còn nguyên khi tắt app. Mỗi mã ảnh là duy nhất nên không bao giờ bị cũ;
+   * ảnh không còn là ảnh mới nhất của công trình nào thì bị xóa ở bước dọn (prefetchThumbs).
+   */
+  const idb = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('congtrinh-vinhtuy', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('thumbs');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }).catch(() => null));
+    const tx = (mode, fn) => open().then(db => db ? new Promise(res => {
+      try { const t = db.transaction('thumbs', mode), st = t.objectStore('thumbs'); const r = fn(st); t.oncomplete = () => res(r && r.result); t.onerror = t.onabort = () => res(null); }
+      catch (e) { res(null); }
+    }) : null);
+    return {
+      get: k => tx('readonly', st => st.get(k)),
+      set: (k, v) => tx('readwrite', st => st.put(v, k)),
+      keys: () => tx('readonly', st => st.getAllKeys()).then(x => x || []),
+      del: ks => ks.length ? tx('readwrite', st => { ks.forEach(k => st.delete(k)); }) : Promise.resolve()
+    };
+  })();
+  const SMALL = 300;   // cỡ ảnh nhỏ dùng chung cho thẻ, hồ sơ và ảnh hiện tạm ở popup
+  function thumb(fid, size, pid) {
     const k = fid + '@' + size;
-    return thumbCache[k] || (thumbCache[k] = call('apiGetThumb', { id: fid, size }).catch(e => { delete thumbCache[k]; throw e; }));
+    return thumbCache[k] || (thumbCache[k] = (size === SMALL ? idb.get(k) : Promise.resolve(null)).then(hit => hit ||
+      call('apiGetThumb', { id: fid, size, pid: pid || '', latest: !!pid }).then(url => { if (size === SMALL) idb.set(k, url); return url; })
+    ).catch(e => { delete thumbCache[k]; throw e; }));
+  }
+  /** Ảnh nhỏ đã có sẵn trong máy (không gọi máy chủ), không có thì null. */
+  function thumbLocal(fid) {
+    const k = fid + '@' + SMALL;
+    return (thumbCache[k] || idb.get(k)).then(x => x || null, () => null);
+  }
+  /** Thu nhỏ ảnh (data URL) còn cạnh dài ~320 px, để lưu làm ảnh nhỏ. */
+  function makeSmall(dataUrl) {
+    return new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 320 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => res('');
+      img.src = dataUrl;
+    });
+  }
+  /** Tải ảnh lên kèm ảnh nhỏ. latest: đây là ảnh mới nhất của lần lưu (ảnh nhỏ của công trình được thay bằng ảnh này). */
+  function uploadPhoto(p, dataUrl, index, caption, latest) {
+    return makeSmall(dataUrl).then(small => call('apiUploadPhoto', { id: p.id, dataUrl, index, caption, thumb: latest ? small : '', latest: !!latest })
+      .then(res => { seedThumb(res.fileId, dataUrl, small); return res; }));
   }
   /** Ảnh vừa chụp trên máy này: dùng luôn bản đã nén, không phải tải lại từ máy chủ. */
-  function seedThumb(fid, dataUrl) { [300, 800].forEach(s => { thumbCache[fid + '@' + s] = Promise.resolve(dataUrl); }); }
+  function seedThumb(fid, dataUrl, small) {
+    thumbCache[fid + '@800'] = Promise.resolve(dataUrl);
+    thumbCache[fid + '@' + SMALL] = Promise.resolve(small || dataUrl);
+    if (small) idb.set(fid + '@' + SMALL, small);
+  }
+  /**
+   * Sau khi có danh sách công trình: tải một lượt các ảnh nhỏ còn thiếu trong máy (một lần gọi máy chủ),
+   * rồi xóa ảnh nhỏ của những ảnh không còn là ảnh mới nhất.
+   */
+  function prefetchThumbs() {
+    prefetchThumbs._p = (prefetchThumbs._p || Promise.resolve()).then(prefetchRun);   // chạy lần lượt, lần sau thấy máy đã có thì khỏi tải
+    return prefetchThumbs._p;
+  }
+  function prefetchRun() {
+    const latest = {};
+    state.projects.forEach(p => { if (p.last && p.last.photo && p.last.photo.id) latest[p.last.photo.id] = true; });
+    return idb.keys().then(keys => {
+      const have = {};
+      keys.forEach(k => { have[String(k)] = true; });
+      const old = keys.filter(k => !latest[String(k).split('@')[0]]);
+      idb.del(old);
+      const need = Object.keys(latest).filter(f => !have[f + '@' + SMALL]);
+      if (!need.length) return;
+      return call('apiGetThumbs', { ids: need }).then(map => {
+        Object.keys(map || {}).forEach(f => { const k = f + '@' + SMALL; thumbCache[k] = Promise.resolve(map[f]); idb.set(k, map[f]); });
+      });
+    }).catch(() => { /* lỗi thì ảnh vẫn tải từng cái như cũ */ });
+  }
   /** Đặt ảnh thu nhỏ làm nền ô (cắt giữa, vừa mọi tỷ lệ ảnh). still(): ô vẫn còn đúng công trình. */
-  function fillThumb(box, fid, size, still) {
+  function fillThumb(box, fid, size, still, pid) {
     box.classList.add('loading');
-    thumb(fid, size).then(url => {
+    thumb(fid, size, pid).then(url => {
       if (!still() || !box.isConnected) return;
       box.style.backgroundImage = 'url("' + url + '")';
       box.dataset.src = url;
@@ -2286,20 +2363,27 @@
     if (!ph) return;
     const box = el.querySelector('.mpop-photo');
     box.onclick = () => openPhoto(ph.id, box.dataset.src);
-    thumb(ph.id, 800).then(url => {
-      if (el.dataset.id !== p.id || !box.isConnected) return;
+    // Ảnh nhỏ có sẵn trong máy thì hiện ngay, ảnh nét hơn (800 px) tải xong sẽ thay vào
+    let big = false;
+    const show = (url, sharp) => {
+      if (el.dataset.id !== p.id || !box.isConnected || (big && !sharp)) return;
       const img = new Image();
       img.alt = 'Ảnh hiện trường gần nhất';
       img.onload = () => {
-        if (!box.isConnected) return;
+        if (!box.isConnected || el.dataset.id !== p.id || (big && !sharp)) return;
+        if (sharp) big = true;
         // Khung cao cố định, rộng theo đúng tỷ lệ ảnh: 3:4 rộng 225, 9:16 rộng 169; ảnh ngang tối đa 300 và hiện trọn
         const w = Math.round(box.clientHeight * img.naturalWidth / img.naturalHeight);
         box.style.width = Math.max(150, Math.min(300, w)) + 'px';
+        const prev = box.querySelector('img'); if (prev) prev.remove();
         box.prepend(img); box.dataset.src = url; box.classList.remove('loading');
         placePop();
       };
       img.src = url;
-    }).catch(() => { box.classList.remove('loading'); box.classList.add('failed'); });
+    };
+    thumbLocal(ph.id).then(url => { if (url) show(url, false); });
+    thumb(ph.id, 800, p.id).then(url => show(url, true))
+      .catch(() => { if (!box.querySelector('img')) { box.classList.remove('loading'); box.classList.add('failed'); } });
   }
   function hidePop() { const el = $('mpop'); if (el.hidden) return; el.hidden = true; el.innerHTML = ''; el.dataset.id = ''; $('panelMap').classList.remove('pop-open'); }
   /** Đặt popup bên phải marker, mũi tên chỉ vào marker và cách viền marker một khoảng nhỏ. */
@@ -2466,7 +2550,7 @@
     btn.disabled = true; prog.hidden = false;
     const ids = [], total = insp.files.length;
     // Tải 2 ảnh cùng lúc (trước đây tải lần lượt từng ảnh); thứ tự ảnh vẫn giữ đúng như lúc chọn
-    let next = 0, done = insp.uploaded.filter(Boolean).length, failed = null;
+    let next = 0, done = Object.values(insp.uploaded).filter(Boolean).length, failed = null;
     const showProg = () => { prog.textContent = 'Đang xử lý và tải ảnh ' + Math.min(done + 1, total) + '/' + total + '…'; };
     const worker = () => {
       const i = next++;
@@ -2475,7 +2559,7 @@
       if (insp.uploaded[i]) { ids[i] = insp.uploaded[i]; return worker(); }
       showProg();
       return processImage(f.file, stampLines(f.file, p))
-        .then(dataUrl => call('apiUploadPhoto', { id: p.id, dataUrl, index: i + 1, caption: status }).then(res => { seedThumb(res.fileId, dataUrl); return res; }))
+        .then(dataUrl => uploadPhoto(p, dataUrl, i + 1, status, i === total - 1))
         .then(res => { insp.uploaded[i] = res.fileId; ids[i] = res.fileId; done++; showProg(); return worker(); },
           err => { failed = failed || err; });
     };
