@@ -2394,18 +2394,23 @@
     insp.busy = true;
     const btn = $('btnSave'), prog = $('iProg');
     btn.disabled = true; prog.hidden = false;
-    const ids = [];
-    let chain = Promise.resolve();
-    insp.files.forEach((f, i) => {
-      chain = chain.then(() => {
-        if (insp.uploaded[i]) { ids.push(insp.uploaded[i]); return; }
-        prog.textContent = 'Đang xử lý và tải ảnh ' + (i + 1) + '/' + insp.files.length + '…';
-        return processImage(f.file, stampLines(f.file, p))
-          .then(dataUrl => call('apiUploadPhoto', { id: p.id, dataUrl, index: i + 1, caption: status }).then(res => { seedThumb(res.fileId, dataUrl); return res; }))
-          .then(res => { insp.uploaded[i] = res.fileId; ids.push(res.fileId); return res; });
-      });
-    });
-    chain.then(() => {
+    const ids = [], total = insp.files.length;
+    // Tải 2 ảnh cùng lúc (trước đây tải lần lượt từng ảnh); thứ tự ảnh vẫn giữ đúng như lúc chọn
+    let next = 0, done = insp.uploaded.filter(Boolean).length, failed = null;
+    const showProg = () => { prog.textContent = 'Đang xử lý và tải ảnh ' + Math.min(done + 1, total) + '/' + total + '…'; };
+    const worker = () => {
+      const i = next++;
+      if (i >= total || failed) return Promise.resolve();
+      const f = insp.files[i];
+      if (insp.uploaded[i]) { ids[i] = insp.uploaded[i]; return worker(); }
+      showProg();
+      return processImage(f.file, stampLines(f.file, p))
+        .then(dataUrl => call('apiUploadPhoto', { id: p.id, dataUrl, index: i + 1, caption: status }).then(res => { seedThumb(res.fileId, dataUrl); return res; }))
+        .then(res => { insp.uploaded[i] = res.fileId; ids[i] = res.fileId; done++; showProg(); return worker(); },
+          err => { failed = failed || err; });
+    };
+    // Chờ cả hai luồng dừng hẳn rồi mới báo lỗi, để bấm Thử lại không tải trùng ảnh đang tải dở
+    Promise.all([worker(), worker()]).then(() => { if (failed) throw failed; }).then(() => {
       prog.textContent = 'Đang lưu kiểm tra…';
       return call('apiSaveInspection', {
         id: p.id, status, note,
