@@ -749,3 +749,16 @@ textarea.input { min-height: 88px; resize: vertical; }
 .pin-edit { background: none; border: 0; }
 .pin-edit svg { display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); cursor: grab; }
 .pin-edit span { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); padding: 3px 9px; border-radius: 8px; background: var(--primary); color: var(--on-primary); font-size: 11px; font-weight: 500; white-space: nowrap; pointer-events: none; }
+
+/* Lưu ngầm: thanh nhỏ báo đang gửi / chờ mạng / lỗi */
+.sync { position: fixed; z-index: 2900; left: 0; right: 0; margin: 0 auto; width: max-content; max-width: calc(100% - 32px); bottom: calc(76px + var(--bottombar) + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; min-height: 32px; border-radius: 999px; background: var(--surface, #1b1d21); color: var(--text, #e8e9eb); border: 1px solid var(--border, rgba(255,255,255,.12)); font-size: 13px; line-height: 18px; box-shadow: var(--shadow); }
+.sync[data-state="busy"], .sync[data-state="ok"] { padding-right: 12px; }
+.sync[data-state="ok"] svg { color: var(--ok, #3fb37f); }
+.sync[data-state="wait"] { border-color: #f2b33d; }
+.sync[data-state="err"] { border-color: var(--danger, #e5534b); }
+.sync > span:not(.sync-spin) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-btn { flex: none; border: 0; border-radius: 999px; padding: 4px 10px; min-height: 26px; background: var(--primary); color: var(--on-primary); font: inherit; font-weight: 600; cursor: pointer; }
+.sync-spin { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: syncspin .8s linear infinite; opacity: .8; }
+@media (max-width: 899px) { .sync { bottom: calc(144px + var(--bottombar) + env(safe-area-inset-bottom)); } }
+@keyframes syncspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .sync-spin { animation: none; border-right-color: currentColor; opacity: .5; } }
