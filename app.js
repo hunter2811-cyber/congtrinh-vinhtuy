@@ -279,10 +279,12 @@
     res.projects.forEach(p => { p.owner = displayOwner(p.owner); });
     state.projects = res.projects;
     state.byId = Object.fromEntries(res.projects.map(p => [p.id, p]));
+    outbox.reapply();
     $('stamp').textContent = 'Dữ liệu lúc ' + res.loadedAt.slice(-5);
     $('user').innerHTML = '<b>' + esc(res.user.name) + '</b><span>' + (res.user.role === 'admin' ? 'Quản trị' : 'Cán bộ hiện trường') + '</span>';
     renderFilters(); renderList(); renderMarkers(); updateNear();
     if (app.dataset.page === 'list') renderListPage();
+    if (outbox.jobs.length) outbox.kick();
     if (state.selected && state.byId[state.selected] && isOpen($('detail'))) openDetail(state.selected);
     if (!viaScriptRun) {
       if (install.prompt) install.show('android');
@@ -1254,28 +1256,96 @@
   }
   $('scrim').onclick = closeStatus;
 
+  /** Bấm Lưu: đóng bảng ngay, hiện trạng đổi trên máy liền, việc gửi lên máy chủ chạy ngầm (xem outbox). */
   function saveStatus() {
     if (!stFor || stFor.busy) return;
     const p = state.byId[stFor.id];
     const status = stFor.pick || $('stText').value.trim();
     if (!status) return;
-    stFor.busy = true;
-    const btn = $('stSave'); btn.disabled = true; btn.textContent = 'Đang lưu…';
-    call('apiSaveInspection', { id: p.id, status, note: '', lat: null, lng: null, acc: null, updateLocation: false, photoIds: [] })
-      .then(res => {
-        p.last = Object.assign({}, p.last || {}, { t: Date.now(), at: res.at, by: state.user.name, status, count: (p.last ? p.last.count : 0) + 1 });
-        p.status = status; p.statusFrom = 'app'; p.group = groupOf(status, p);
-        stFor.busy = false; closeStatus();
-        refresh(); updateNear();
-        if (isOpen($('detail')) && state.selected === p.id) openDetail(p.id);
-        if (!$('mpop').hidden && $('mpop').dataset.id === p.id) showPop(p);
-        toast('Đã cập nhật: ' + status, 3000, true);
-      })
-      .catch(err => {
-        stFor.busy = false; btn.disabled = false; btn.textContent = 'Thử lại';
-        toast('Chưa lưu được: ' + (err && err.message || err), 5000);
-      });
+    const job = outbox.add({ id: p.id, status, t: Date.now(), by: state.user.name });
+    applyPendingStatus(p, job);
+    closeStatus();
+    refresh(); updateNear();
+    if (isOpen($('detail')) && state.selected === p.id) openDetail(p.id);
+    if (!$('mpop').hidden && $('mpop').dataset.id === p.id) showPop(p);
+    toast('Đã cập nhật: ' + status, 2200, true);
   }
+  function applyPendingStatus(p, job) {
+    p.last = Object.assign({}, p.last || {}, { t: job.t, at: stampNow(new Date(job.t)), by: job.by, status: job.status, count: (p.last ? p.last.count || 0 : 0) + 1 });
+    p.status = job.status; p.statusFrom = 'app'; p.group = groupOf(job.status, p);
+  }
+
+  /*
+   * Hàng chờ lưu ngầm: mỗi lần cập nhật hiện trạng được giữ trong máy (localStorage) cho tới khi máy chủ nhận.
+   * Gửi lần lượt từng việc theo đúng thứ tự bấm. Mất mạng thì tự thử lại (3 giây, 10 giây, 30 giây, rồi mỗi phút)
+   * và thử ngay khi có mạng lại. Tắt app giữa chừng thì lần mở sau gửi tiếp.
+   */
+  const outbox = {
+    jobs: (() => { try { return JSON.parse(store.get('outbox')) || []; } catch (e) { return []; } })(),
+    busy: false, tries: 0, timer: 0, doneAt: 0,
+    save() { store.set('outbox', JSON.stringify(this.jobs)); },
+    add(job) { job.k = job.t + '-' + Math.random().toString(36).slice(2, 7); this.jobs.push(job); this.save(); this.tries = 0; this.kick(); return job; },
+    kick() { clearTimeout(this.timer); this.timer = 0; this.render(); if (!this.busy) this.next(); },
+    next() {
+      const job = this.jobs[0];
+      if (!job) { this.render(); return; }
+      if (job.err) { this.render(); return; }   // máy chủ từ chối: chờ người dùng bấm Thử lại
+      this.busy = true; this.render();
+      call('apiSaveInspection', { id: job.id, status: job.status, note: '', lat: null, lng: null, acc: null, updateLocation: false, photoIds: [] })
+        .then(res => {
+          this.busy = false; this.tries = 0; this.offline = false;
+          this.jobs.shift(); this.save();
+          const p = state.byId && state.byId[job.id];
+          if (p && p.last && p.last.t === job.t) p.last.at = res.at;
+          if (!this.jobs.length) this.doneAt = Date.now();
+          this.next();
+        }, err => {
+          this.busy = false;
+          if (err instanceof ApiError) {
+            if (err.message === 'AUTH') { this.render(); return; }   // đã hiện màn đăng nhập; đăng nhập lại là gửi tiếp
+            job.err = String(err.message || err); this.save(); this.render(); return;
+          }
+          this.offline = true; this.tries++;
+          const wait = [3, 10, 30][this.tries - 1] || 60;
+          this.render();
+          this.timer = setTimeout(() => this.kick(), wait * 1000);
+        });
+    },
+    retry() { this.jobs.forEach(j => { delete j.err; }); this.save(); this.tries = 0; this.kick(); },
+    /** Sau khi tải lại dữ liệu: hiện trạng chưa gửi xong vẫn hiện bản mới, không bị bản cũ trên máy chủ đè. */
+    reapply() {
+      this.jobs.forEach(j => { const p = state.byId[j.id]; if (p) applyPendingStatus(p, j); });
+    },
+    render() {
+      const el = $('sync'); if (!el) return;
+      const n = this.jobs.length, failed = this.jobs.find(j => j.err);
+      clearTimeout(this._h);
+      if (!n) {
+        if (this.doneAt && Date.now() - this.doneAt < 1500) {
+          el.dataset.state = 'ok'; el.innerHTML = ICON.check.replace('width="16" height="16"', 'width="14" height="14"') + '<span>Đã lưu xong</span>';
+          el.hidden = false; this._h = setTimeout(() => { el.hidden = true; }, 1600);
+        } else el.hidden = true;
+        return;
+      }
+      el.hidden = false;
+      const what = n === 1 ? '1 cập nhật' : n + ' cập nhật';
+      if (failed) {
+        el.dataset.state = 'err';
+        el.innerHTML = '<span>Chưa lưu được ' + what + ': ' + esc(failed.err) + '</span><button type="button" class="sync-btn" data-retry>Thử lại</button>';
+      } else if (this.offline && !this.busy) {
+        el.dataset.state = 'wait';
+        el.innerHTML = '<span>Mất mạng · ' + what + ' chờ gửi, tự thử lại</span><button type="button" class="sync-btn" data-retry>Gửi ngay</button>';
+      } else {
+        el.dataset.state = 'busy';
+        el.innerHTML = '<span class="sync-spin" aria-hidden="true"></span><span>Đang lưu ngầm ' + what + '…</span>';
+      }
+      const b = el.querySelector('[data-retry]'); if (b) b.onclick = () => this.retry();
+    }
+  };
+  window.addEventListener('online', () => { if (outbox.jobs.length) { outbox.tries = 0; outbox.kick(); } });
+  window.addEventListener('beforeunload', e => { if (outbox.jobs.length) { e.preventDefault(); e.returnValue = ''; } });
+
+
 
   /* ---------------- Trang danh sách công trình (máy tính) ---------------- */
 
