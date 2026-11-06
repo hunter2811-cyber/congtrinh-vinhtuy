@@ -1576,8 +1576,9 @@
   document.querySelector('.pagetabs').addEventListener('click', e => { const b = e.target.closest('[data-page]'); if (b) setPage(b.dataset.page); });
 
   /* ---------------- Báo cáo tuần ---------------- */
-  // Lập theo mẫu tab "Bao cao tuan": chia khu I, II, III theo cột Địa bàn, khu IV là công trình đã thông báo khởi công
-  // nhưng chưa thi công. Bỏ công trình đã xong hoặc đã đưa vào sử dụng. Trong mỗi khu xếp theo ngày thi công.
+  // Lập theo mẫu tab "Bao cao tuan": chia khu I, II, III theo cột Địa bàn; mục IV là công trình chuyển sang "Đã đưa vào
+  // sử dụng" trong kỳ (đánh số riêng); mục V là công trình đã thông báo khởi công nhưng chưa thi công. Bỏ công trình đã xong
+  // hoặc đã đưa vào sử dụng từ trước kỳ. Trong mỗi khu xếp theo ngày thi công.
   const REPORT = {
     org: ['UBND PHƯỜNG VĨNH TUY', 'PHÒNG HẠ TẦNG, ĐÔ THỊ VÀ MÔI TRƯỜNG'],
     nation: ['CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', 'Độc lập - Tự do - Hạnh phúc'],
@@ -1587,14 +1588,16 @@
       { key: 'II', title: 'II. KV 2 - PHÍA NAM PHỐ LẠC TRUNG ĐẾN PHÍA BẮC PHỐ MINH KHAI (TDP 8÷16)' },
       { key: 'III', title: 'III. KV 3 - PHÍA NAM PHỐ MINH KHAI (TDP 17÷38)' },
       { key: '?', title: 'CÔNG TRÌNH CHƯA GHI ĐỊA BÀN' },   // chỉ hiện khi có
-      { key: 'IV', title: 'IV. CÁC CÔNG TRÌNH ĐÃ THÔNG BÁO KHỞI CÔNG' }
+      { key: 'SD', title: 'IV. CÁC CÔNG TRÌNH ĐÃ ĐƯA VÀO SỬ DỤNG TRONG TUẦN', own: true },   // đánh số lại từ 1 (mẫu anh gửi 06/11)
+      { key: 'KC', title: 'V. CÁC CÔNG TRÌNH ĐÃ THÔNG BÁO KHỞI CÔNG' }
     ],
     // Dòng tổng hợp theo file mẫu anh căn chỉnh (28/10): nhãn bên trái căn phải, nội dung bắt đầu từ cột Số GPXD
     summary: d => [
       ['Tổng số ' + d.total + ' công trình, trong đó:', ' ' + d.legal + ' đúng phép; ' + d.unlicensed + ' công trình không phép; ' + d.wrong + ' công trình sai phép;'],
       ['', '- ' + d.building + ' công trình đang thi công;'],
       ['', ' - ' + d.notice + ' công trình đã thông báo khởi công.'],
-      ['Tổng số vi phạm: ', d.wrong + ' sai phép + ' + d.unlicensed + ' không phép = ' + (d.wrong + d.unlicensed) + ' công trình.']
+      ['Tổng số vi phạm: ', d.wrong + ' sai phép + ' + d.unlicensed + ' không phép = ' + (d.wrong + d.unlicensed) + ' công trình.'],
+      ['Tổng số CT đưa vào sử dụng trong tuần:', ' ' + d.used + ' công trình']
     ],
     signers: [
       { role: 'TỔ VIÊN', name: '' },
@@ -1629,7 +1632,7 @@
   }
   function reportData() {
     const to = rp.to + DAY - 1;
-    // Khu I, II, III xếp theo ngày thi công (cũ trước, mới sau); khu IV xếp theo ngày thông báo khởi công
+    // Khu I, II, III xếp theo ngày thi công (cũ trước, mới sau); mục V xếp theo ngày thông báo khởi công
     const order = p => dateValue(p.start) || dateValue(p.tbkc) || Infinity;
     const idNum = p => { const m = String(p.id).match(/^(\d{4})-(\d+)$/); return m ? +m[1] * 1e4 + +m[2] : 1e9; };
     const rows = state.projects.filter(p => {
@@ -1638,24 +1641,26 @@
       const first = Math.min(dateValue(p.tbkc) || Infinity, dateValue(p.start) || Infinity);
       return !(first !== Infinity && first > to);   // công trình mới có sau kỳ báo cáo thì chưa tính
     });
-    const by = {};
+    // Mục IV: hiện trạng chuyển sang "Đã đưa vào sử dụng" (trong app hoặc trong file) trong kỳ báo cáo
+    const used = state.projects.filter(p => stageOf(p) === 'sudung' && p.statusAt >= rp.from && p.statusAt <= to);
+    const by = { SD: used };
     rows.forEach(p => {
-      // Khu IV: hiện trạng "chưa thi công" và chưa có ngày thi công; có ngày thi công rồi thì chuyển về khu I, II, III
-      const key = stageOf(p) === 'chua' && !dateValue(p.start) ? 'IV' : (['I', 'II', 'III'].indexOf(p.area) >= 0 ? p.area : '?');
+      // Mục V: hiện trạng "chưa thi công" và chưa có ngày thi công; có ngày thi công rồi thì chuyển về khu I, II, III
+      const key = stageOf(p) === 'chua' && !dateValue(p.start) ? 'KC' : (['I', 'II', 'III'].indexOf(p.area) >= 0 ? p.area : '?');
       (by[key] = by[key] || []).push(p);
     });
     let tt = 0;
-    const sections = REPORT.sections.filter(s => s.key !== '?' || by['?']).map(s => ({
+    const sections = REPORT.sections.filter(s => s.key !== '?' || by['?']).map(s => { let own = 0; return {
       key: s.key, title: s.title,
       rows: (by[s.key] || []).sort((a, b) => order(a) - order(b) || idNum(a) - idNum(b)).map(p => ({
-        id: p.id, tt: ++tt, owners: reportOwners(p), address: p.address,
+        id: p.id, tt: s.own ? ++own : ++tt, owners: reportOwners(p), address: p.address,
         permit: [p.gpxd, p.gpxdDate ? 'ngày ' + p.gpxdDate : ''].filter(Boolean).join(' '),
         scale: p.scale, status: p.status || '', steps: reportSteps(p), note: ''   // cột Ghi chú để trống, không lấy từ file dữ liệu
       }))
-    }));
-    const total = rows.length, notice = (by.IV || []).length;
+    }; });
+    const total = rows.length, notice = (by.KC || []).length;
     // App chỉ quản lý công trình có phép: mọi công trình đánh dấu "Có phép", số vi phạm bằng 0 như mẫu
-    return { sections, total, legal: total, unlicensed: 0, wrong: 0, building: total - notice, notice, noArea: (by['?'] || []).length };
+    return { sections, total, legal: total, unlicensed: 0, wrong: 0, building: total - notice, notice, used: used.length, noArea: (by['?'] || []).length };
   }
   function renderReport() {
     if (!rp.from) setReportWeek(0, true);
@@ -1663,7 +1668,7 @@
     $('rpStats').innerHTML = [
       [d.total, 'Tổng số công trình'], [d.legal, 'Đúng phép'], [d.building, 'Đang thi công'], [d.notice, 'Chưa khởi công']
     ].map(x => '<div class="rp-stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('');
-    $('rpViol').innerHTML = 'Vi phạm: ' + d.wrong + ' sai phép + ' + d.unlicensed + ' không phép = <b>' + (d.wrong + d.unlicensed) + '</b> công trình';
+    $('rpViol').innerHTML = 'Vi phạm: ' + d.wrong + ' sai phép + ' + d.unlicensed + ' không phép = <b>' + (d.wrong + d.unlicensed) + '</b> công trình<br>Đưa vào sử dụng trong tuần: <b>' + d.used + '</b> công trình';
     $('rpInfo').textContent = d.total + ' công trình';
     const cell = (v, cls) => '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td>';
     const body = d.sections.map(sec => '<tr class="sec"><td colspan="10">' + esc(sec.title) + '</td></tr>' +
@@ -1758,20 +1763,23 @@
     merge(2, 7, 2, 10, REPORT.nation[1], { align: mid, font: { bold: true, underline: true } });
     merge(4, 1, 4, 10, REPORT.title, { align: mid, font: { bold: true, size: 13 } });
     merge(5, 1, 5, 10, '(Từ ' + dmy(rp.from) + ' đến ' + dmy(rp.to) + ')', { align: mid, font: { italic: true } });
-    REPORT.summary(d).forEach((x, i) => {
+    const sum = REPORT.summary(d);
+    sum.forEach((x, i) => {
       if (x[0]) put(6 + i, 5, x[0], { align: { horizontal: 'right', wrapText: false } });
       put(6 + i, 6, x[1], { align: { wrapText: false } });
+      ws.getRow(6 + i).height = LINE;
     });
-    [1, 2, 4, 5, 6, 7, 8, 9].forEach(r => { ws.getRow(r).height = r === 4 ? 16.5 : LINE; });
+    [1, 2, 4, 5].forEach(r => { ws.getRow(r).height = r === 4 ? 16.5 : LINE; });
+    const h1 = 7 + sum.length, h2 = h1 + 1;   // tiêu đề bảng ngay sau dòng tổng hợp và một hàng trống
     const H = { align: mid, font: { bold: true }, border: true };
     const heads = ['TT', 'Tên chủ đầu tư, địa điểm xây dựng', null, null, null, 'Số GPXD\nNgày cấp\nQuy mô', 'Hiện trạng công trình', 'Biện pháp xử lý', 'Ghi chú', 'Đơn thư'];
-    heads.forEach((h, i) => { if (h) merge(11, i + 1, 12, i + 1, h, H); });
-    merge(11, 3, 11, 5, 'Cơ sở pháp lý', H);
-    ['Có phép', 'Không phép', 'Sai phép'].forEach((h, i) => put(12, 3 + i, h, { align: mid, border: true }));
-    for (let c = 1; c <= 10; c++) ws.getCell(11, c).border = ws.getCell(12, c).border = box;
-    ws.getRow(11).height = ws.getRow(12).height = 32.1;
-    ws.pageSetup.printTitlesRow = '11:12';
-    let r = 13;
+    heads.forEach((h, i) => { if (h) merge(h1, i + 1, h2, i + 1, h, H); });
+    merge(h1, 3, h1, 5, 'Cơ sở pháp lý', H);
+    ['Có phép', 'Không phép', 'Sai phép'].forEach((h, i) => put(h2, 3 + i, h, { align: mid, border: true }));
+    for (let c = 1; c <= 10; c++) ws.getCell(h1, c).border = ws.getCell(h2, c).border = box;
+    ws.getRow(h1).height = ws.getRow(h2).height = 32.1;
+    ws.pageSetup.printTitlesRow = h1 + ':' + h2;
+    let r = h2 + 1;
     d.sections.forEach(sec => {
       merge(r, 1, r, 10, sec.title, { font: { bold: true }, border: true, align: { horizontal: 'left' } });
       for (let c = 1; c <= 10; c++) ws.getCell(r, c).border = box;
