@@ -1641,8 +1641,9 @@
       const first = Math.min(dateValue(p.tbkc) || Infinity, dateValue(p.start) || Infinity);
       return !(first !== Infinity && first > to);   // công trình mới có sau kỳ báo cáo thì chưa tính
     });
-    // Mục IV: hiện trạng chuyển sang "Đã đưa vào sử dụng" (trong app hoặc trong file) trong kỳ báo cáo
-    const used = state.projects.filter(p => stageOf(p) === 'sudung' && p.statusAt >= rp.from && p.statusAt <= to);
+    // Mục IV: hiện trạng chuyển sang "Đã đưa vào sử dụng" (trong app hoặc trong file) trong kỳ báo cáo. Kỳ chốt lúc 13h thứ Sáu
+    // (anh chốt 06/11): từ sau 13h thứ Sáu tuần trước đến 13h thứ Sáu cuối kỳ; 8h thứ Bảy máy chủ tự đổi các công trình này thành "xong".
+    const used = state.projects.filter(p => stageOf(p) === 'sudung' && p.statusAt > rp.from - 11 * 36e5 && p.statusAt <= rp.to + 13 * 36e5);
     const by = { SD: used };
     rows.forEach(p => {
       // Mục V: hiện trạng "chưa thi công" và chưa có ngày thi công; có ngày thi công rồi thì chuyển về khu I, II, III
