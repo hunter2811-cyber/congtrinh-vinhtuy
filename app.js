@@ -1608,7 +1608,19 @@
   const REPORT_COLS = [5, 32.86, 7, 7, 7, 26, 26.71, 24.57, 11.86, 8];   // độ rộng cột theo file mẫu anh căn chỉnh (đơn vị Excel)
   const REPORT_W = REPORT_COLS.reduce((a, b) => a + b, 0);
   const DAY = 864e5;
-  const rp = { from: 0, to: 0, week: 0 };
+  const rp = { from: 0, to: 0, week: 0, snap: null, snaps: {} };
+  /** Kỳ đã qua: lấy bản chốt máy chủ lưu lúc 8h thứ Bảy (anh chốt 13/11) để hiện đúng báo cáo đã lập; chưa có thì tính theo dữ liệu hiện tại. */
+  function loadSnapshot() {
+    rp.snap = null;
+    const key = isoDate(rp.from);
+    if (rp.to + DAY > Date.now()) return;   // kỳ chưa hết: luôn tính theo dữ liệu hiện tại
+    if (key in rp.snaps) { rp.snap = rp.snaps[key]; return; }
+    call('apiGetReport', key).then(s => {
+      s = s && Array.isArray(s.sections) ? s : null;
+      rp.snaps[key] = s;
+      if (isoDate(rp.from) === key && s) { rp.snap = s; renderReport(); }
+    }).catch(() => {});
+  }
   const isoDate = t => { const d = new Date(t); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
   const dmy = t => { const d = new Date(t); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(); };
   const fromIso = v => { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : 0; };
@@ -1631,6 +1643,7 @@
     return out.join('\n');
   }
   function reportData() {
+    if (rp.snap) return rp.snap;
     const to = rp.to + DAY - 1;
     // Khu I, II, III xếp theo ngày thi công (cũ trước, mới sau); mục V xếp theo ngày thông báo khởi công
     const order = p => dateValue(p.start) || dateValue(p.tbkc) || Infinity;
@@ -1670,7 +1683,7 @@
       [d.total, 'Tổng số công trình'], [d.legal, 'Đúng phép'], [d.building, 'Đang thi công'], [d.notice, 'Chưa khởi công']
     ].map(x => '<div class="rp-stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>').join('');
     $('rpViol').innerHTML = 'Vi phạm: ' + d.wrong + ' sai phép + ' + d.unlicensed + ' không phép = <b>' + (d.wrong + d.unlicensed) + '</b> công trình<br>Đưa vào sử dụng trong tuần: <b>' + d.used + '</b> công trình';
-    $('rpInfo').textContent = d.total + ' công trình';
+    $('rpInfo').textContent = (rp.snap ? 'Bản đã chốt, lưu lúc ' + rp.snap.savedAt + ' · ' : rp.to + DAY <= Date.now() ? 'Chưa có bản chốt, tính theo dữ liệu hiện tại · ' : '') + d.total + ' công trình';
     const cell = (v, cls) => '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td>';
     const body = d.sections.map(sec => '<tr class="sec"><td colspan="10">' + esc(sec.title) + '</td></tr>' +
       (sec.rows.length ? sec.rows.map(r => '<tr data-id="' + esc(r.id) + '">' +
@@ -1693,7 +1706,7 @@
   }
   function setReportWeek(week, quiet) {
     const w = reportWeek(week);
-    rp.week = week; rp.from = w.from; rp.to = w.to;
+    rp.week = week; rp.from = w.from; rp.to = w.to; loadSnapshot();
     $('rpFrom').value = isoDate(rp.from); $('rpTo').value = isoDate(rp.to);
     $('rpWeeks').querySelectorAll('[data-week]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.week === week)));
     if (!quiet) renderReport();
@@ -1702,7 +1715,7 @@
   ['rpFrom', 'rpTo'].forEach(id => $(id).addEventListener('change', () => {
     const f = fromIso($('rpFrom').value), t = fromIso($('rpTo').value);
     if (!f || !t) return;
-    rp.from = Math.min(f, t); rp.to = Math.max(f, t); rp.week = null;
+    rp.from = Math.min(f, t); rp.to = Math.max(f, t); rp.week = null; loadSnapshot();
     $('rpWeeks').querySelectorAll('[data-week]').forEach(b => b.setAttribute('aria-pressed', 'false'));
     renderReport();
   }));
