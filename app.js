@@ -1274,6 +1274,7 @@
   function applyPendingStatus(p, job) {
     p.last = Object.assign({}, p.last || {}, { t: job.t, at: stampNow(new Date(job.t)), by: job.by, status: job.status, count: (p.last ? p.last.count || 0 : 0) + 1 });
     p.status = job.status; p.statusFrom = 'app'; p.group = groupOf(job.status, p);
+    p.statusAt = job.t;   // báo cáo tuần tính mục IV theo lúc đổi hiện trạng
   }
 
   /*
@@ -1609,7 +1610,7 @@
   const REPORT_W = REPORT_COLS.reduce((a, b) => a + b, 0);
   const DAY = 864e5;
   const rp = { from: 0, to: 0, week: 0, snap: null, snaps: {} };
-  /** Kỳ đã qua: lấy bản chốt máy chủ lưu lúc 8h thứ Bảy (anh chốt 13/11) để hiện đúng báo cáo đã lập; chưa có thì tính theo dữ liệu hiện tại. */
+  /** Kỳ đã qua: lấy bản chốt máy chủ lưu lúc 14h thứ Sáu cùng file Excel (sửa 14/11) để hiện đúng báo cáo đã lập; chưa có thì tính theo dữ liệu hiện tại. */
   function loadSnapshot() {
     rp.snap = null;
     const key = isoDate(rp.from);
@@ -1617,7 +1618,7 @@
     if (key in rp.snaps) { rp.snap = rp.snaps[key]; return; }
     call('apiGetReport', key).then(s => {
       s = s && Array.isArray(s.sections) ? s : null;
-      rp.snaps[key] = s;
+      if (s) rp.snaps[key] = s;   // chưa có bản chốt thì không nhớ, lần mở sau hỏi lại máy chủ
       if (isoDate(rp.from) === key && s) { rp.snap = s; renderReport(); }
     }).catch(() => {});
   }
@@ -2608,7 +2609,7 @@
       // Cập nhật ngay trên máy, không cần tải lại toàn bộ
       p.last = { t: Date.now(), at: res.at, by: state.user.name, status, note, photos: ids.length, count: (p.last ? p.last.count : 0) + 1,
         photo: ids.length ? { id: ids[ids.length - 1], n: ids.length, t: Date.now(), at: res.at } : (p.last && p.last.photo) || null };
-      if (status) { p.status = status; p.statusFrom = 'app'; p.group = groupOf(status, p); }
+      if (status) { p.status = status; p.statusFrom = 'app'; p.group = groupOf(status, p); p.statusAt = Date.now(); }   // statusAt: mục IV báo cáo tuần thấy ngay, không cần tải lại
       if (move && insp.pos) p.loc = { lat: insp.pos.lat, lng: insp.pos.lng, acc: Math.round(insp.pos.acc), source: 'GPS hiện trường', by: state.user.name, at: res.at };
       insp.busy = false;
       closeInspect();
